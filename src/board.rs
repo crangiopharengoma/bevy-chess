@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 // use bevy_mod_picking::PickingEvent::Selection;
-use crate::pieces::Piece;
+use crate::pieces::{Piece, PieceColour};
 use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
 
 pub struct BoardPlugin;
@@ -16,15 +16,60 @@ impl Plugin for BoardPlugin {
     }
 }
 
-#[derive(Clone, Copy, Component)]
+#[derive(Clone, Copy, Component, PartialEq, Debug)]
 pub struct Square {
-    pub x: u8,
-    pub y: u8,
+    pub x: i8,
+    pub y: i8,
 }
 
 impl Square {
     fn is_white(&self) -> bool {
         (self.x + self.y + 1) % 2 == 0
+    }
+
+    /// Returns true if `other` is adjacent to `self`. Adjacency includes diagonals
+    ///
+    /// Note: returns false if other == self
+    pub fn is_adjacent(&self, other: &Square) -> bool {
+        (self.x - other.x).abs() <= 1 && (self.y - other.y).abs() <= 1
+    }
+
+    /// Returns true if `other` is in the same rank as `self`
+    ///
+    /// Note: returns true if other == self
+    pub fn is_same_rank(&self, other: &Square) -> bool {
+        self.y == other.y
+    }
+
+    /// Returns true if `other` is in the same file as `self`
+    ///
+    /// Note: returns true if other == self
+    pub fn is_same_file(&self, other: &Square) -> bool {
+        self.x == other.x
+    }
+
+    /// Returns true if `other` is on the same diagonal as `self`
+    ///
+    /// Note: returns true if other == self
+    pub fn is_same_diagonal(&self, other: &Square) -> bool {
+        (self.x - other.x).abs() == (self.y - other.y).abs()
+    }
+
+    /// Checks if a piece in the supplied slice of `Piece` occupies the current square
+    ///
+    /// Returns `None` if `self` is empty, otherwise returns `Some(PieceColour)` of the
+    /// piece occupying `self`
+    pub fn is_occupied(&self, pieces: &[Piece]) -> Option<PieceColour> {
+        pieces
+            .iter()
+            .find(|piece| *self == piece.pos)
+            .map(|piece| piece.colour)
+    }
+}
+
+impl From<(i8, i8)> for Square {
+    fn from((x, y): (i8, i8)) -> Self {
+        Square { x, y }
     }
 }
 
@@ -145,9 +190,12 @@ fn update_selected_piece(
 
     // a piece is selected, so lets move it
     if let Some(piece_entity) = selected_piece.entity {
+        let pieces_vec = pieces.iter_mut().map(|(piece, _)| *piece).collect();
+
         if let Ok((mut piece, _)) = pieces.get_mut(piece_entity) {
-            piece.x = square.x;
-            piece.y = square.y;
+            if piece.is_move_valid(*square, pieces_vec) {
+                piece.pos = *square;
+            }
         }
 
         selected_piece.entity = None;
@@ -156,7 +204,7 @@ fn update_selected_piece(
         // no piece currently selected, if one is in the selected square, select it
         selected_piece.entity = pieces
             .iter_mut()
-            .find(|(piece, _)| piece.x == square.x && piece.y == square.y)
+            .find(|(piece, _)| piece.pos == *square)
             .map(|(_, piece_entity)| piece_entity);
         Some(selected_square)
     }

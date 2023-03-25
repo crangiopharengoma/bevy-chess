@@ -5,6 +5,7 @@ use crate::board::BoardPlugin;
 use crate::pieces::PiecesPlugin;
 
 mod board;
+mod movement;
 mod pieces;
 
 fn main() {

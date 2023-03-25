@@ -1,3 +1,6 @@
+use crate::board::Square;
+use crate::movement;
+use crate::movement::move_pieces;
 use bevy::prelude::*;
 
 pub struct PiecesPlugin;
@@ -10,18 +13,19 @@ impl Plugin for PiecesPlugin {
     }
 }
 
-#[derive(Clone, Copy, Component)]
-pub struct Piece {
-    pub colour: PieceColour,
-    pub piece_type: PieceType,
-    pub x: u8,
-    pub y: u8,
-}
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum PieceColour {
     White,
     Black,
+}
+
+impl PieceColour {
+    pub fn opponent(&self) -> PieceColour {
+        match self {
+            PieceColour::White => PieceColour::Black,
+            PieceColour::Black => PieceColour::White,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -59,13 +63,16 @@ pub enum PieceMesh {
     King(Handle<Mesh>, Handle<Mesh>),
 }
 
-fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece)>) {
-    for (mut transform, piece) in query.iter_mut() {
-        let direction = Vec3::new(piece.x as f32, 0.0, piece.y as f32) - transform.translation;
+#[derive(Clone, Copy, Component)]
+pub struct Piece {
+    pub colour: PieceColour,
+    pub piece_type: PieceType,
+    pub pos: Square,
+}
 
-        if direction.length() > 0.1 {
-            transform.translation += direction.normalize() * time.delta_seconds();
-        }
+impl Piece {
+    pub fn is_move_valid(&self, new_position: Square, pieces: Vec<Piece>) -> bool {
+        movement::is_move_valid(self, new_position, pieces)
     }
 }
 
@@ -218,8 +225,10 @@ fn spawn_piece(
             Piece {
                 colour: piece_colour,
                 piece_type: (&piece).into(), // from impl on ref to allow mesh to be reused later
-                x: position.x as u8,
-                y: position.z as u8,
+                pos: Square {
+                    x: position.x as i8,
+                    y: position.z as i8,
+                },
             },
         ))
         .with_children(|parent| {
