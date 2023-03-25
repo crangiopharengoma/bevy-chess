@@ -1,19 +1,22 @@
 use bevy::prelude::*;
 // use bevy_mod_picking::PickingEvent::Selection;
-use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, SelectionEvent};
+use crate::pieces::Piece;
+use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
 
 pub struct BoardPlugin;
 
 impl Plugin for BoardPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SelectedSquare>()
+        app // new line
+            .init_resource::<SelectedSquare>()
+            .init_resource::<SelectedPiece>()
             .add_startup_system(create_board)
             .add_system(colour_squares)
             .add_system(select_square);
     }
 }
 
-#[derive(Component)]
+#[derive(Clone, Copy, Component)]
 pub struct Square {
     pub x: u8,
     pub y: u8,
@@ -27,6 +30,11 @@ impl Square {
 
 #[derive(Default, Resource)]
 struct SelectedSquare {
+    entity: Option<Entity>,
+}
+
+#[derive(Default, Resource)]
+struct SelectedPiece {
     entity: Option<Entity>,
 }
 
@@ -72,9 +80,24 @@ fn create_board(
 fn colour_squares() {}
 
 // Query based version
-// fn select_square(query: Query<(&Selection, Entity)>, mut selected_square: ResMut<SelectedSquare>) {
-//     if let Some((_, entity)) = query.iter().find(|(selection, _)| selection.selected()) {
+// fn select_square_query(
+//     selection_query: Query<(&Selection, &Square, Entity)>,
+//     mut pieces: Query<(&mut Piece, Entity)>,
+//     mut selected_square: ResMut<SelectedSquare>,
+//     mut selected_piece: ResMut<SelectedPiece>,
+// ) {
+//     if let Some((_, square, entity)) = selection_query
+//         .iter()
+//         .find(|(selection, _, _)| selection.selected())
+//     {
 //         selected_square.entity = Some(entity);
+//
+//         update_selected_piece(
+//             &mut selected_piece,
+//             &mut selected_square,
+//             &squares,
+//             &mut pieces,
+//         );
 //     } else {
 //         selected_square.entity = None;
 //     }
@@ -84,13 +107,57 @@ fn colour_squares() {}
 fn select_square(
     mut events: EventReader<PickingEvent>,
     mut selected_square: ResMut<SelectedSquare>,
+    mut selected_piece: ResMut<SelectedPiece>,
+    squares: Query<&Square>,
+    mut pieces: Query<(&mut Piece, Entity)>,
 ) {
     for event in events.iter() {
         if let PickingEvent::Selection(event) = event {
             selected_square.entity = match event {
-                SelectionEvent::JustSelected(entity) => Some(*entity),
+                SelectionEvent::JustSelected(entity) => {
+                    update_selected_piece(&mut selected_piece, *entity, &squares, &mut pieces)
+                }
                 SelectionEvent::JustDeselected(_) => None,
             }
         }
+    }
+}
+
+/// Updates the location of the currently selected piece based on the location of the selected square
+/// represented by the `selected_square` `Entity`
+///
+/// If no piece is currently selected, checks if there is a piece at the currently selected location
+/// and updates the selected piece
+///
+/// Returns `None` if a piece is currently selected, otherwise returns `Some(selected_square)`
+///
+/// # Panics
+///
+/// Panics if the selected_square entity does not have a `Square` component
+///
+fn update_selected_piece(
+    selected_piece: &mut ResMut<SelectedPiece>,
+    selected_square: Entity,
+    squares: &Query<&Square>,
+    pieces: &mut Query<(&mut Piece, Entity)>,
+) -> Option<Entity> {
+    let square = squares.get(selected_square).unwrap();
+
+    // a piece is selected, so lets move it
+    if let Some(piece_entity) = selected_piece.entity {
+        if let Ok((mut piece, _)) = pieces.get_mut(piece_entity) {
+            piece.x = square.x;
+            piece.y = square.y;
+        }
+
+        selected_piece.entity = None;
+        None
+    } else {
+        // no piece currently selected, if one is in the selected square, select it
+        selected_piece.entity = pieces
+            .iter_mut()
+            .find(|(piece, _)| piece.x == square.x && piece.y == square.y)
+            .map(|(_, piece_entity)| piece_entity);
+        Some(selected_square)
     }
 }
