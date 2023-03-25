@@ -1,7 +1,46 @@
 use bevy::prelude::*;
 
+#[derive(Clone, Copy, Component)]
+pub struct Piece {
+    pub colour: PieceColour,
+    pub piece_type: PieceType,
+    pub x: u8,
+    pub y: u8,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum PieceColour {
+    White,
+    Black,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum PieceType {
+    King,
+    Queen,
+    Bishop,
+    Knight,
+    Rook,
+    Pawn,
+}
+
+impl From<&PieceMesh> for PieceType {
+    fn from(value: &PieceMesh) -> Self {
+        use PieceMesh as Pm;
+        use PieceType as Pt;
+        match value {
+            Pm::King(_, _) => Pt::King,
+            Pm::Knight(_, _) => Pt::Knight,
+            Pm::Queen(_) => Pt::Queen,
+            Pm::Bishop(_) => Pt::Bishop,
+            Pm::Rook(_) => Pt::Rook,
+            Pm::Pawn(_) => Pt::Pawn,
+        }
+    }
+}
+
 #[derive(Clone)]
-pub enum Piece {
+pub enum PieceMesh {
     Pawn(Handle<Mesh>),
     Rook(Handle<Mesh>),
     Bishop(Handle<Mesh>),
@@ -16,126 +55,118 @@ pub fn create_pieces(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let pieces = [
-        Piece::King(
+        PieceMesh::King(
             asset_server.load("models/pieces.glb#Mesh0/Primitive0"),
             asset_server.load("models/pieces.glb#Mesh1/Primitive0"),
         ),
-        Piece::Pawn(asset_server.load("models/pieces.glb#Mesh2/Primitive0")),
-        Piece::Knight(
+        PieceMesh::Queen(asset_server.load("models/pieces.glb#Mesh7/Primitive0")),
+        PieceMesh::Rook(asset_server.load("models/pieces.glb#Mesh5/Primitive0")),
+        PieceMesh::Bishop(asset_server.load("models/pieces.glb#Mesh6/Primitive0")),
+        PieceMesh::Knight(
             asset_server.load("models/pieces.glb#Mesh3/Primitive0"),
             asset_server.load("models/pieces.glb#Mesh4/Primitive0"),
         ),
-        Piece::Rook(asset_server.load("models/pieces.glb#Mesh5/Primitive0")),
-        Piece::Bishop(asset_server.load("models/pieces.glb#Mesh6/Primitive0")),
-        Piece::Queen(asset_server.load("models/pieces.glb#Mesh7/Primitive0")),
+        PieceMesh::Pawn(asset_server.load("models/pieces.glb#Mesh2/Primitive0")),
     ];
 
-    // let king_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh0/Primitive0"),
-    // let king_cross_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh1/Primitive0");
-    // let pawn_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh2/Primitive0");
-    // let knight_1_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh3/Primitive0");
-    // let knight_2_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh4/Primitive0");
-    // let rook_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh5/Primitive0");
-    // let bishop_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh6/Primitive0");
-    // let queen_handle: Handle<Mesh> = asset_server.load("models/pieces.glb#Mesh7/Primitive0");
-
-    let white_material = materials.add(Color::rgb(1.0, 0.8, 0.8).into());
-    let black_material = materials.add(Color::rgb(0.0, 0.2, 0.2).into());
-
-    spawn_set(&mut commands, white_material, &pieces, (1.0, 0.0));
-    spawn_set(&mut commands, black_material, &pieces, (6.0, 7.0));
-
-    // spawn_knight(
-    //     &mut commands,
-    //     white_material.clone(),
-    //     knight_1_handle.clone(),
-    //     knight_2_handle.clone(),
-    //     Vec3::new(0.0, 0.0, 1.0),
-    // );
-    //
-    // spawn_queen(
-    //     &mut commands,
-    //     white_material.clone(),
-    //     queen_handle.clone(),
-    //     Vec3::new(0.0, 0.0, 3.0),
-    // );
-    //
-    // spawn_king(
-    //     &mut commands,
-    //     white_material.clone(),
-    //     king_handle.clone(),
-    //     king_cross_handle.clone(),
-    //     Vec3::new(0.0, 0.0, 4.0),
-    // );
+    spawn_set(
+        &mut commands,
+        PieceColour::White,
+        &mut materials,
+        &pieces,
+        (1.0, 0.0),
+    );
+    spawn_set(
+        &mut commands,
+        PieceColour::Black,
+        &mut materials,
+        &pieces,
+        (6.0, 7.0),
+    );
 }
 
 fn spawn_set(
     commands: &mut Commands,
-    material: Handle<StandardMaterial>,
-    pieces: &[Piece],
+    piece_colour: PieceColour,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    pieces: &[PieceMesh],
     (front_row, back_row): (f32, f32),
 ) {
+    let material = match piece_colour {
+        PieceColour::White => materials.add(Color::rgb(1.0, 0.8, 0.8).into()),
+        PieceColour::Black => materials.add(Color::rgb(0.0, 0.2, 0.2).into()),
+    };
+
     for piece in pieces {
         match &piece {
-            Piece::King(_, _) => spawn_king(
+            PieceMesh::King(_, _) => spawn_king(
                 commands,
                 material.clone(),
+                piece_colour,
                 piece.clone(),
                 Vec3::new(back_row, 0.0, 4.0),
             ),
-            Piece::Queen(_) => spawn_queen(
+            PieceMesh::Queen(_) => spawn_queen(
                 commands,
                 material.clone(),
+                piece_colour,
                 piece.clone(),
                 Vec3::new(back_row, 0.0, 3.0),
             ),
-            Piece::Rook(_) => {
+            PieceMesh::Rook(_) => {
                 spawn_rook(
                     commands,
                     material.clone(),
+                    piece_colour,
                     piece.clone(),
                     Vec3::new(back_row, 0.0, 0.0),
                 );
                 spawn_rook(
                     commands,
                     material.clone(),
+                    piece_colour,
                     piece.clone(),
                     Vec3::new(back_row, 0.0, 7.0),
                 );
             }
-            Piece::Bishop(_) => {
+            PieceMesh::Bishop(_) => {
                 spawn_bishop(
                     commands,
                     material.clone(),
+                    piece_colour,
                     piece.clone(),
                     Vec3::new(back_row, 0.0, 2.0),
                 );
                 spawn_bishop(
                     commands,
                     material.clone(),
+                    piece_colour,
                     piece.clone(),
                     Vec3::new(back_row, 0.0, 5.0),
                 );
             }
-            Piece::Knight(_, _) => {
+            PieceMesh::Knight(_, _) => {
                 spawn_knight(
                     commands,
                     material.clone(),
+                    piece_colour,
                     piece.clone(),
                     Vec3::new(back_row, 0.0, 1.0),
                 );
                 spawn_knight(
                     commands,
                     material.clone(),
+                    piece_colour,
                     piece.clone(),
                     Vec3::new(back_row, 0.0, 6.0),
                 );
             }
-            Piece::Pawn(_) => {
+            PieceMesh::Pawn(_) => {
                 for i in 0..=7 {
                     spawn_pawn(
                         commands,
                         material.clone(),
+                        piece_colour,
                         piece.clone(),
                         Vec3::new(front_row, 0.0, i as f32),
                     );
@@ -148,7 +179,8 @@ fn spawn_set(
 fn spawn_piece(
     commands: &mut Commands,
     material: Handle<StandardMaterial>,
-    piece: Piece,
+    piece_colour: PieceColour,
+    piece: PieceMesh,
     position: Vec3,
     translation: Vec3,
 ) {
@@ -158,12 +190,20 @@ fn spawn_piece(
         transform
     };
     commands
-        .spawn(PbrBundle {
-            transform: Transform::from_translation(position),
-            ..Default::default()
-        })
+        .spawn((
+            PbrBundle {
+                transform: Transform::from_translation(position),
+                ..Default::default()
+            },
+            Piece {
+                colour: piece_colour,
+                piece_type: (&piece).into(), // from impl on ref to allow mesh to be reused later
+                x: position.x as u8,
+                y: position.z as u8,
+            },
+        ))
         .with_children(|parent| {
-            use Piece::*;
+            use PieceMesh::*;
             match piece {
                 King(mesh_1, mesh_2) | Knight(mesh_1, mesh_2) => {
                     spawn_child(mesh_1, material.clone(), parent, transform);
@@ -193,12 +233,14 @@ fn spawn_child(
 fn spawn_king(
     commands: &mut Commands,
     material: Handle<StandardMaterial>,
-    piece: Piece,
+    piece_colour: PieceColour,
+    piece: PieceMesh,
     position: Vec3,
 ) {
     spawn_piece(
         commands,
         material,
+        piece_colour,
         piece,
         position,
         Vec3::new(-0.2, 0.0, -1.9),
@@ -208,12 +250,14 @@ fn spawn_king(
 fn spawn_knight(
     commands: &mut Commands,
     material: Handle<StandardMaterial>,
-    piece: Piece,
+    piece_colour: PieceColour,
+    piece: PieceMesh,
     position: Vec3,
 ) {
     spawn_piece(
         commands,
         material,
+        piece_colour,
         piece,
         position,
         Vec3::new(-0.2, 0.0, 0.9),
@@ -223,12 +267,14 @@ fn spawn_knight(
 fn spawn_queen(
     commands: &mut Commands,
     material: Handle<StandardMaterial>,
-    piece: Piece,
+    piece_colour: PieceColour,
+    piece: PieceMesh,
     position: Vec3,
 ) {
     spawn_piece(
         commands,
         material,
+        piece_colour,
         piece,
         position,
         Vec3::new(-0.2, 0.0, -0.95),
@@ -238,12 +284,14 @@ fn spawn_queen(
 fn spawn_bishop(
     commands: &mut Commands,
     material: Handle<StandardMaterial>,
-    piece: Piece,
+    piece_colour: PieceColour,
+    piece: PieceMesh,
     position: Vec3,
 ) {
     spawn_piece(
         commands,
         material,
+        piece_colour,
         piece,
         position,
         Vec3::new(-0.1, 0.0, 0.0),
@@ -253,12 +301,14 @@ fn spawn_bishop(
 fn spawn_rook(
     commands: &mut Commands,
     material: Handle<StandardMaterial>,
-    piece: Piece,
+    piece_colour: PieceColour,
+    piece: PieceMesh,
     position: Vec3,
 ) {
     spawn_piece(
         commands,
         material,
+        piece_colour,
         piece,
         position,
         Vec3::new(-0.1, 0.0, 1.8),
@@ -268,12 +318,14 @@ fn spawn_rook(
 fn spawn_pawn(
     commands: &mut Commands,
     material: Handle<StandardMaterial>,
-    piece: Piece,
+    piece_colour: PieceColour,
+    piece: PieceMesh,
     position: Vec3,
 ) {
     spawn_piece(
         commands,
         material,
+        piece_colour,
         piece,
         position,
         Vec3::new(-0.2, 0.0, 2.6),
