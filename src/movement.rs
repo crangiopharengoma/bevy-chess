@@ -18,6 +18,8 @@ pub fn is_move_valid(piece: &Piece, new_position: Square, pieces: Vec<Piece>) ->
         return false;
     }
 
+    // TODO must move out of check if possible
+
     match piece.piece_type {
         PieceType::King => is_valid_for_king(piece, new_position),
         PieceType::Queen => is_valid_for_queen(piece, new_position, &pieces),
@@ -31,6 +33,7 @@ pub fn is_move_valid(piece: &Piece, new_position: Square, pieces: Vec<Piece>) ->
 fn is_valid_for_king(piece: &Piece, new_position: Square) -> bool {
     piece.pos.is_adjacent(&new_position)
     // TODO castling
+    // TODO prevent moving into check
 }
 
 fn is_valid_for_queen(piece: &Piece, new_position: Square, pieces: &[Piece]) -> bool {

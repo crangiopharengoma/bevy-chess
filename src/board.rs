@@ -150,6 +150,7 @@ fn colour_squares() {}
 
 // Event based version
 fn select_square(
+    mut commands: Commands,
     mut events: EventReader<PickingEvent>,
     mut selected_square: ResMut<SelectedSquare>,
     mut selected_piece: ResMut<SelectedPiece>,
@@ -159,9 +160,13 @@ fn select_square(
     for event in events.iter() {
         if let PickingEvent::Selection(event) = event {
             selected_square.entity = match event {
-                SelectionEvent::JustSelected(entity) => {
-                    update_selected_piece(&mut selected_piece, *entity, &squares, &mut pieces)
-                }
+                SelectionEvent::JustSelected(entity) => update_selected_piece(
+                    &mut commands,
+                    &mut selected_piece,
+                    *entity,
+                    &squares,
+                    &mut pieces,
+                ),
                 SelectionEvent::JustDeselected(_) => None,
             }
         }
@@ -181,6 +186,7 @@ fn select_square(
 /// Panics if the selected_square entity does not have a `Square` component
 ///
 fn update_selected_piece(
+    commands: &mut Commands,
     selected_piece: &mut ResMut<SelectedPiece>,
     selected_square: Entity,
     squares: &Query<&Square>,
@@ -188,12 +194,22 @@ fn update_selected_piece(
 ) -> Option<Entity> {
     let square = squares.get(selected_square).unwrap();
 
-    // a piece is selected, so lets move it
     if let Some(piece_entity) = selected_piece.entity {
+        // a piece is selected, so lets move it
         let pieces_vec = pieces.iter_mut().map(|(piece, _)| *piece).collect();
+
+        // this requires a mutable borrow so needs to be done before retrieve the piece that is moving
+        let taken_piece = pieces
+            .iter_mut()
+            .find(|(taking_piece, _)| taking_piece.pos == *square)
+            .map(|(_, entity)| entity);
 
         if let Ok((mut piece, _)) = pieces.get_mut(piece_entity) {
             if piece.is_move_valid(*square, pieces_vec) {
+                if let Some(entity) = taken_piece {
+                    commands.entity(entity).despawn_recursive();
+                }
+
                 piece.pos = *square;
             }
         }
