@@ -10,9 +10,19 @@ impl Plugin for BoardPlugin {
         app // new line
             .init_resource::<SelectedSquare>()
             .init_resource::<SelectedPiece>()
+            .init_resource::<PlayerTurn>()
             .add_startup_system(create_board)
             .add_system(colour_squares)
             .add_system(select_square);
+    }
+}
+
+#[derive(Resource)]
+struct PlayerTurn(PieceColour);
+
+impl Default for PlayerTurn {
+    fn default() -> Self {
+        Self(PieceColour::White)
     }
 }
 
@@ -154,6 +164,7 @@ fn select_square(
     mut events: EventReader<PickingEvent>,
     mut selected_square: ResMut<SelectedSquare>,
     mut selected_piece: ResMut<SelectedPiece>,
+    mut turn: ResMut<PlayerTurn>,
     squares: Query<&Square>,
     mut pieces: Query<(&mut Piece, Entity)>,
 ) {
@@ -164,6 +175,7 @@ fn select_square(
                     &mut commands,
                     &mut selected_piece,
                     *entity,
+                    &mut turn,
                     &squares,
                     &mut pieces,
                 ),
@@ -189,6 +201,7 @@ fn update_selected_piece(
     commands: &mut Commands,
     selected_piece: &mut ResMut<SelectedPiece>,
     selected_square: Entity,
+    turn: &mut ResMut<PlayerTurn>,
     squares: &Query<&Square>,
     pieces: &mut Query<(&mut Piece, Entity)>,
 ) -> Option<Entity> {
@@ -206,11 +219,16 @@ fn update_selected_piece(
 
         if let Ok((mut piece, _)) = pieces.get_mut(piece_entity) {
             if piece.is_move_valid(*square, pieces_vec) {
+                // take
                 if let Some(entity) = taken_piece {
                     commands.entity(entity).despawn_recursive();
                 }
 
+                // move
                 piece.pos = *square;
+
+                // switch turn to opponent
+                turn.0 = turn.0.opponent();
             }
         }
 
@@ -220,7 +238,7 @@ fn update_selected_piece(
         // no piece currently selected, if one is in the selected square, select it
         selected_piece.entity = pieces
             .iter_mut()
-            .find(|(piece, _)| piece.pos == *square)
+            .find(|(piece, _)| piece.pos == *square && piece.colour == turn.0)
             .map(|(_, piece_entity)| piece_entity);
         Some(selected_square)
     }

@@ -13,8 +13,6 @@ fn main() {
         .insert_resource(Msaa::Sample4)
         .add_plugins(DefaultPlugins)
         .add_plugins(DefaultPickingPlugins)
-        .add_plugin(bevy_mod_picking::DebugCursorPickingPlugin)
-        .add_plugin(bevy_mod_picking::DebugEventsPickingPlugin)
         .add_plugin(BoardPlugin)
         .add_plugin(PiecesPlugin)
         .add_startup_system(setup)
