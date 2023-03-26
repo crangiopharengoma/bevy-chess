@@ -3,10 +3,12 @@ use bevy_mod_picking::{DefaultPickingPlugins, PickingCameraBundle};
 
 use crate::board::BoardPlugin;
 use crate::pieces::PiecesPlugin;
+use crate::ui::UiPlugin;
 
 mod board;
 mod movement;
 mod pieces;
+mod ui;
 
 fn main() {
     App::default()
@@ -15,6 +17,7 @@ fn main() {
         .add_plugins(DefaultPickingPlugins)
         .add_plugin(BoardPlugin)
         .add_plugin(PiecesPlugin)
+        .add_plugin(UiPlugin)
         .add_startup_system(setup)
         .run();
 }

@@ -1,7 +1,6 @@
+use crate::pieces::{Piece, PieceColour, PieceType};
 use bevy::app::AppExit;
 use bevy::prelude::*;
-// use bevy_mod_picking::PickingEvent::Selection;
-use crate::pieces::{Piece, PieceColour, PieceType};
 use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
 
 pub struct BoardPlugin;
@@ -19,7 +18,7 @@ impl Plugin for BoardPlugin {
 }
 
 #[derive(Resource)]
-struct PlayerTurn(PieceColour);
+pub struct PlayerTurn(pub PieceColour);
 
 impl Default for PlayerTurn {
     fn default() -> Self {
