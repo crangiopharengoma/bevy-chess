@@ -1,6 +1,7 @@
+use bevy::app::AppExit;
 use bevy::prelude::*;
 // use bevy_mod_picking::PickingEvent::Selection;
-use crate::pieces::{Piece, PieceColour};
+use crate::pieces::{Piece, PieceColour, PieceType};
 use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
 
 pub struct BoardPlugin;
@@ -162,6 +163,7 @@ fn colour_squares() {}
 fn select_square(
     mut commands: Commands,
     mut events: EventReader<PickingEvent>,
+    mut exit_event_writer: EventWriter<AppExit>,
     mut selected_square: ResMut<SelectedSquare>,
     mut selected_piece: ResMut<SelectedPiece>,
     mut turn: ResMut<PlayerTurn>,
@@ -173,6 +175,7 @@ fn select_square(
             selected_square.entity = match event {
                 SelectionEvent::JustSelected(entity) => update_selected_piece(
                     &mut commands,
+                    &mut exit_event_writer,
                     &mut selected_piece,
                     *entity,
                     &mut turn,
@@ -199,6 +202,7 @@ fn select_square(
 ///
 fn update_selected_piece(
     commands: &mut Commands,
+    exit_event_writer: &mut EventWriter<AppExit>,
     selected_piece: &mut ResMut<SelectedPiece>,
     selected_square: Entity,
     turn: &mut ResMut<PlayerTurn>,
@@ -215,13 +219,24 @@ fn update_selected_piece(
         let taken_piece = pieces
             .iter_mut()
             .find(|(taking_piece, _)| taking_piece.pos == *square)
-            .map(|(_, entity)| entity);
+            .map(|(piece, entity)| (piece.piece_type, entity));
 
         if let Ok((mut piece, _)) = pieces.get_mut(piece_entity) {
             if piece.is_move_valid(*square, pieces_vec) {
                 // take
-                if let Some(entity) = taken_piece {
+                if let Some((piece_type, entity)) = taken_piece {
                     commands.entity(entity).despawn_recursive();
+
+                    if piece_type == PieceType::King {
+                        println!(
+                            "{} won! Thanks for playing!",
+                            match turn.0 {
+                                PieceColour::White => "White",
+                                PieceColour::Black => "Black",
+                            }
+                        );
+                        exit_event_writer.send(AppExit);
+                    }
                 }
 
                 // move
