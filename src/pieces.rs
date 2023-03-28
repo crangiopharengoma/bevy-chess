@@ -1,7 +1,7 @@
+use bevy::prelude::*;
+
 use crate::board::Square;
 use crate::movement;
-use crate::movement::move_pieces;
-use bevy::prelude::*;
 
 pub struct PiecesPlugin;
 

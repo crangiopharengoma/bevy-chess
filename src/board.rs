@@ -1,7 +1,8 @@
-use crate::pieces::{Piece, PieceColour, PieceType};
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
+
+use crate::pieces::{Piece, PieceColour, PieceType};
 
 pub struct BoardPlugin;
 
@@ -131,7 +132,6 @@ fn create_board(
                 PbrBundle {
                     mesh: mesh.clone(),
                     material: initial_material.clone(),
-
                     transform: Transform::from_translation(Vec3::new(i as f32, 0.0, j as f32)),
                     ..Default::default()
                 },
