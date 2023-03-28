@@ -14,6 +14,7 @@ impl Plugin for PiecesPlugin {
 }
 
 #[derive(Clone, Copy, PartialEq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum PieceColour {
     White,
     Black,
@@ -29,6 +30,7 @@ impl PieceColour {
 }
 
 #[derive(Clone, Copy, PartialEq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum PieceType {
     King,
     Queen,
@@ -54,6 +56,7 @@ impl From<&PieceMesh> for PieceType {
 }
 
 #[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum PieceMesh {
     Pawn(Handle<Mesh>),
     Rook(Handle<Mesh>),
@@ -64,6 +67,7 @@ pub enum PieceMesh {
 }
 
 #[derive(Clone, Copy, Component)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Piece {
     pub colour: PieceColour,
     pub piece_type: PieceType,
@@ -73,6 +77,17 @@ pub struct Piece {
 impl Piece {
     pub fn is_move_valid(&self, new_position: Square, pieces: Vec<Piece>) -> bool {
         movement::is_move_valid(self, new_position, pieces)
+    }
+}
+
+pub fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece)>) {
+    for (mut transform, piece) in query.iter_mut() {
+        let direction =
+            Vec3::new(piece.pos.x as f32, 0.0, piece.pos.y as f32) - transform.translation;
+
+        if direction.length() > 0.1 {
+            transform.translation += direction.normalize() * time.delta_seconds();
+        }
     }
 }
 
