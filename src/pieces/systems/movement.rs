@@ -1,5 +1,8 @@
-use crate::board::Square;
-use crate::pieces::{Piece, PieceColour, PieceType};
+use bevy::math::Vec3;
+use bevy::prelude::*;
+
+use crate::board::{Square, Taken};
+use crate::pieces::components::{Piece, PieceColour, PieceType};
 
 pub fn is_move_valid(piece: &Piece, new_position: Square, pieces: Vec<Piece>) -> bool {
     if new_position == piece.pos || new_position.is_occupied(&pieces) == Some(piece.colour) {
@@ -117,5 +120,16 @@ fn is_path_empty(begin: Square, end: Square, pieces: &[Piece]) -> bool {
         }
 
         true
+    }
+}
+
+pub fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece), Without<Taken>>) {
+    for (mut transform, piece) in query.iter_mut() {
+        let direction =
+            Vec3::new(piece.pos.x as f32, 0.0, piece.pos.y as f32) - transform.translation;
+
+        if direction.length() > 0.1 {
+            transform.translation += direction.normalize() * time.delta_seconds();
+        }
     }
 }

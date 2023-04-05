@@ -1,14 +1,14 @@
 use bevy::prelude::*;
 use bevy_mod_picking::{DefaultPickingPlugins, PickingCameraBundle};
 
+use pieces::PiecesPlugin;
+
 use crate::board::BoardPlugin;
 use crate::history::HistoryPlugin;
-use crate::pieces::PiecesPlugin;
 use crate::ui::UiPlugin;
 
 mod board;
 mod history;
-mod movement;
 mod pieces;
 mod ui;
 

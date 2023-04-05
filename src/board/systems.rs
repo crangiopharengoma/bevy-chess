@@ -1,11 +1,5 @@
 use bevy::app::AppExit;
-use bevy::asset::Assets;
-use bevy::math::Vec3;
-use bevy::pbr::{PbrBundle, StandardMaterial};
-use bevy::prelude::{
-    shape, Color, Commands, DetectChanges, Entity, EventReader, EventWriter, Mesh, Query, Res,
-    ResMut, Time, Transform,
-};
+use bevy::prelude::*;
 use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
 
 use crate::board::components::{Square, Taken};
@@ -177,6 +171,7 @@ pub fn remove_taken_pieces(
         }
 
         let direction = taken.grave - transform.translation;
+        // TODO handle piece square not being reset
 
         if direction.length() > 0.1 {
             transform.translation += direction.normalize() * time.delta_seconds() * 5.0;

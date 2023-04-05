@@ -1,5 +1,5 @@
 use bevy::math::Vec3;
-use bevy::prelude::Component;
+use bevy::prelude::*;
 
 use crate::pieces::{Piece, PieceColour};
 
