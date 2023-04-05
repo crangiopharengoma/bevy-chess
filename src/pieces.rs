@@ -1,6 +1,8 @@
+use std::fmt::{Display, Formatter};
+
 use bevy::prelude::*;
 
-use crate::board::Square;
+use crate::board::{Square, Taken};
 use crate::movement;
 
 pub struct PiecesPlugin;
@@ -26,6 +28,19 @@ impl PieceColour {
             PieceColour::White => PieceColour::Black,
             PieceColour::Black => PieceColour::White,
         }
+    }
+}
+
+impl Display for PieceColour {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                PieceColour::White => "White",
+                PieceColour::Black => "Black",
+            }
+        )
     }
 }
 
@@ -80,7 +95,7 @@ impl Piece {
     }
 }
 
-pub fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece)>) {
+fn move_pieces(time: Res<Time>, mut query: Query<(&mut Transform, &Piece), Without<Taken>>) {
     for (mut transform, piece) in query.iter_mut() {
         let direction =
             Vec3::new(piece.pos.x as f32, 0.0, piece.pos.y as f32) - transform.translation;

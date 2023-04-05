@@ -12,20 +12,73 @@ impl Plugin for BoardPlugin {
             .init_resource::<SelectedSquare>()
             .init_resource::<SelectedPiece>()
             .init_resource::<PlayerTurn>()
+            .init_resource::<Graveyard>()
             .add_event::<ResetSelectedEvent>()
+            .add_event::<MoveMadeEvent>()
             .add_startup_system(create_board)
             .add_system(select_square)
             .add_system(select_piece)
             .add_system(move_piece.before(select_piece)) // if select piece happens first move piece can deselect the selected piece, causing nothing to happen
-            .add_system(despawn_taken_pieces)
+            .add_system(remove_taken_pieces)
             .add_system(reset_selected);
     }
+}
+
+pub struct MoveMadeEvent {
+    pub piece: Piece,
+    pub square: Square,
 }
 
 struct ResetSelectedEvent;
 
 #[derive(Component)]
-struct Taken;
+pub struct Taken {
+    grave: Vec3,
+}
+
+#[derive(Resource)]
+struct Graveyard {
+    white: Vec3,
+    black: Vec3,
+}
+
+impl Default for Graveyard {
+    fn default() -> Self {
+        Graveyard {
+            white: Vec3::new(-1.0, 0.0, 0.0),
+            black: Vec3::new(8.0, 0.0, 0.0),
+        }
+    }
+}
+
+impl Graveyard {
+    fn next(&mut self, colour: PieceColour) -> Vec3 {
+        match colour {
+            PieceColour::White => self.next_white(),
+            PieceColour::Black => self.next_black(),
+        }
+    }
+
+    fn next_white(&mut self) -> Vec3 {
+        let current = self.white;
+        self.white = if current.z >= 7.0 {
+            Vec3::new(current.x - 1.0, current.y, 0.0)
+        } else {
+            Vec3::new(current.x, current.y, current.z + 1.0)
+        };
+        current
+    }
+
+    fn next_black(&mut self) -> Vec3 {
+        let current = self.black;
+        self.black = if current.z >= 7.0 {
+            Vec3::new(current.x + 1.0, current.y, 0.0)
+        } else {
+            Vec3::new(current.x, current.y, current.z + 1.0)
+        };
+        current
+    }
+}
 
 #[derive(Resource)]
 pub struct PlayerTurn(pub PieceColour);
@@ -197,18 +250,21 @@ fn select_piece(
         selected_piece.entity = pieces
             .iter()
             .find(|(_, piece)| piece.pos == *square && piece.colour == turn.0)
-            .map(|(entity, piece)| entity);
+            .map(|(entity, _)| entity);
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn move_piece(
     mut commands: Commands,
     selected_square: Res<SelectedSquare>,
     selected_piece: Res<SelectedPiece>,
     mut turn: ResMut<PlayerTurn>,
+    mut graveyard: ResMut<Graveyard>,
     squares: Query<&Square>,
     mut pieces: Query<(Entity, &mut Piece)>,
     mut reset_selected_event: EventWriter<ResetSelectedEvent>,
+    mut move_made_event: EventWriter<MoveMadeEvent>,
 ) {
     if !selected_square.is_changed() {
         return;
@@ -237,7 +293,9 @@ fn move_piece(
             if piece.is_move_valid(*square, pieces_vec) {
                 // take
                 if let Some(entity) = taken_piece {
-                    commands.entity(entity).insert(Taken);
+                    commands.entity(entity).insert(Taken {
+                        grave: graveyard.next(piece.colour),
+                    });
                 }
 
                 // move
@@ -245,6 +303,10 @@ fn move_piece(
 
                 // switch turn to opponent
                 turn.change();
+                move_made_event.send(MoveMadeEvent {
+                    piece: *piece,
+                    square: *square,
+                });
             }
         }
 
@@ -252,25 +314,23 @@ fn move_piece(
     }
 }
 
-fn despawn_taken_pieces(
-    mut commands: Commands,
+fn remove_taken_pieces(
     mut exit_event: EventWriter<AppExit>,
-    query: Query<(Entity, &Piece, &Taken)>,
+    time: Res<Time>,
+    mut query: Query<(&Piece, &Taken, &mut Transform)>,
 ) {
-    for (entity, piece, _) in query.iter() {
+    for (piece, taken, mut transform) in query.iter_mut() {
         // TODO handle mate
         if piece.piece_type == PieceType::King {
-            println!(
-                "{} won! Thanks for playing!",
-                match piece.colour {
-                    PieceColour::White => "Black",
-                    PieceColour::Black => "White",
-                }
-            );
+            println!("{} won! Thanks for playing!", piece.colour);
             exit_event.send(AppExit);
         }
 
-        commands.entity(entity).despawn_recursive();
+        let direction = taken.grave - transform.translation;
+
+        if direction.length() > 0.1 {
+            transform.translation += direction.normalize() * time.delta_seconds() * 5.0;
+        }
     }
 }
 
