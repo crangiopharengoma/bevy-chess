@@ -8,8 +8,7 @@ edition = "2021"
 [dependencies]
 bevy = "0.10.0"
 # until update for bevy 0.10 is released, point to the migration branch
-# bevy_mod_picking = "0.11.0"
-bevy_mod_picking = {git = "https://github.com/Fincap/bevy_mod_picking", branch = "migrate-bevy-0.10.0"}
+bevy_mod_picking = "0.12.0"
 
 [profile.dev]
 opt-level = 1
