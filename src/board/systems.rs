@@ -75,7 +75,7 @@ pub fn select_piece(
     mut selected_piece: ResMut<SelectedPiece>,
     turn: Res<PlayerTurn>,
     squares: Query<&Square>,
-    pieces: Query<(Entity, &Piece)>,
+    pieces: Query<(Entity, &Piece), Without<Taken>>,
 ) {
     if !selected_square.is_changed() {
         return;
@@ -106,7 +106,7 @@ pub fn move_piece(
     mut turn: ResMut<PlayerTurn>,
     mut graveyard: ResMut<Graveyard>,
     squares: Query<&Square>,
-    mut pieces: Query<(Entity, &mut Piece)>,
+    mut pieces: Query<(Entity, &mut Piece), Without<Taken>>,
     mut reset_selected_event: EventWriter<ResetSelectedEvent>,
     mut move_made_event: EventWriter<MoveMadeEvent>,
 ) {
