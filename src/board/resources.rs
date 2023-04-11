@@ -1,7 +1,31 @@
-use bevy::math::Vec3;
-use bevy::prelude::{Entity, Resource};
+use bevy::prelude::*;
 
 use crate::pieces::PieceColour;
+
+#[derive(Resource)]
+pub struct SquareMaterials {
+    pub selected_colour: Handle<StandardMaterial>,
+    pub hover_colour: Handle<StandardMaterial>,
+    pub black_colour: Handle<StandardMaterial>,
+    pub white_colour: Handle<StandardMaterial>,
+    pub highlight_colour: Handle<StandardMaterial>,
+}
+
+impl FromWorld for SquareMaterials {
+    fn from_world(world: &mut World) -> Self {
+        let world = world.cell();
+        let mut materials = world
+            .get_resource_mut::<Assets<StandardMaterial>>()
+            .unwrap();
+        SquareMaterials {
+            hover_colour: materials.add(Color::rgb(0.1, 0.9, 0.7).into()),
+            selected_colour: materials.add(Color::rgb(0.9, 0.1, 0.1).into()),
+            black_colour: materials.add(Color::rgb(0., 0.1, 0.1).into()),
+            white_colour: materials.add(Color::rgb(1., 0.9, 0.9).into()),
+            highlight_colour: materials.add(Color::rgb(0.3, 0.6, 0.8).into()),
+        }
+    }
+}
 
 #[derive(Resource)]
 pub struct Graveyard {

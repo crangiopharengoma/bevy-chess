@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use bevy::math::Vec3;
 use bevy::prelude::*;
 
@@ -8,7 +10,7 @@ pub struct Taken {
     pub grave: Vec3,
 }
 
-#[derive(Clone, Copy, Component, PartialEq)]
+#[derive(Clone, Copy, Component, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Square {
     pub x: i8,
@@ -57,6 +59,46 @@ impl Square {
             .iter()
             .find(|piece| *self == piece.pos)
             .map(|piece| piece.colour)
+    }
+
+    /// Checks if a square is a valid position on a chess board
+    ///
+    /// True means x and y are both between 0 and 7
+    pub fn is_valid(&self) -> bool {
+        self.x >= 0 && self.x < 8 && self.y >= 0 && self.y < 8
+    }
+
+    /// Fallible add operation
+    ///
+    /// Returns Err(String) if the resulting position would be off the board
+    pub fn try_add(&self, rhs: (i8, i8)) -> Result<Square, String> {
+        let addition = self + rhs;
+        if addition.is_valid() {
+            Ok(addition)
+        } else {
+            Err(String::from("this error message should never be used"))
+        }
+    }
+}
+
+impl Add<(i8, i8)> for Square {
+    type Output = Square;
+
+    // this can be delegated to the impl for &Square but clippy thinks that that's a needless cast
+    #[allow(clippy::op_ref)]
+    fn add(self, rhs: (i8, i8)) -> Self::Output {
+        (&self) + rhs
+    }
+}
+
+impl Add<(i8, i8)> for &Square {
+    type Output = Square;
+
+    fn add(self, (rhs_x, rhs_y): (i8, i8)) -> Self::Output {
+        Square {
+            x: self.x + rhs_x,
+            y: self.y + rhs_y,
+        }
     }
 }
 

@@ -1,16 +1,21 @@
 use bevy::app::AppExit;
 use bevy::prelude::*;
-use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
+use bevy::utils::HashSet;
+use bevy_mod_picking::{
+    Highlighting, Hover, PickableBundle, PickingEvent, Selection, SelectionEvent,
+};
 
 use crate::board::components::{Square, Taken};
 use crate::board::events::{MoveMadeEvent, ResetSelectedEvent};
-use crate::board::resources::{Graveyard, PlayerTurn, SelectedPiece, SelectedSquare};
+use crate::board::resources::{
+    Graveyard, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
+};
 use crate::pieces::{Piece, PieceType};
 
 pub fn create_board(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    square_materials: Res<SquareMaterials>,
 ) {
     let mesh = meshes.add(Mesh::from(shape::Plane {
         size: 1.0,
@@ -21,9 +26,9 @@ pub fn create_board(
         for j in 0..8 {
             let square = Square { x: i, y: j };
             let initial_material = if square.is_white() {
-                materials.add(Color::rgb(1.0, 0.9, 0.9).into())
+                square_materials.white_colour.clone()
             } else {
-                materials.add(Color::rgb(0.0, 0.1, 0.1).into())
+                square_materials.black_colour.clone()
             };
             commands.spawn((
                 PbrBundle {
@@ -35,9 +40,9 @@ pub fn create_board(
                 PickableBundle::default(),
                 Highlighting {
                     initial: initial_material.clone(),
-                    hovered: Some(materials.add(Color::rgb(0.8, 0.3, 0.3).into())),
+                    hovered: Some(square_materials.hover_colour.clone()),
                     pressed: None,
-                    selected: Some(materials.add(Color::rgb(0.9, 0.1, 0.1).into())),
+                    selected: Some(square_materials.selected_colour.clone()),
                 },
                 Square { x: i, y: j },
             ));
@@ -66,6 +71,38 @@ pub fn select_square(
                     }
                 }
             }
+        }
+    }
+}
+
+pub fn colour_moves(
+    selected_piece: Res<SelectedPiece>,
+    materials: Res<SquareMaterials>,
+    pieces: Query<&Piece, Without<Taken>>,
+    mut squares: Query<(&Square, &mut Handle<StandardMaterial>, &Selection, &Hover)>,
+) {
+    let moves = if let Some(piece_entity) = selected_piece.entity {
+        let piece = pieces.get(piece_entity).expect("unable to retrieve entity");
+        let pieces_vec: Vec<_> = pieces.iter().copied().collect();
+
+        piece.legal_moves(&pieces_vec)
+    } else {
+        HashSet::new()
+    };
+
+    for (square, mut material, selection, hover) in squares.iter_mut() {
+        *material = if hover.hovered() {
+            materials.hover_colour.clone()
+        } else if moves.contains(square) {
+            materials.highlight_colour.clone()
+        } else if selection.selected() {
+            materials.selected_colour.clone()
+        } else if hover.hovered() {
+            materials.hover_colour.clone()
+        } else if square.is_white() {
+            materials.white_colour.clone()
+        } else {
+            materials.black_colour.clone()
         }
     }
 }
@@ -125,7 +162,7 @@ pub fn move_piece(
 
     if let Some(piece_entity) = selected_piece.entity {
         // a piece is selected, so lets move it
-        let pieces_vec = pieces.iter_mut().map(|(_, piece)| *piece).collect();
+        let pieces_vec: Vec<_> = pieces.iter_mut().map(|(_, piece)| *piece).collect();
 
         // this requires a mutable borrow so needs to be done before retrieve the piece that is moving
         let taken_piece = pieces
@@ -134,7 +171,8 @@ pub fn move_piece(
             .map(|(entity, _)| entity);
 
         if let Ok((_, mut piece)) = pieces.get_mut(piece_entity) {
-            if piece.is_move_valid(*square, pieces_vec) {
+            if piece.legal_moves(&pieces_vec).contains(square) {
+                // if piece.is_move_valid(*square, pieces_vec) {
                 // take
                 if let Some(entity) = taken_piece {
                     commands.entity(entity).insert(Taken {

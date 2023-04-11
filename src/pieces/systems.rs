@@ -3,7 +3,6 @@ use bevy::prelude::*;
 pub use creation::create_pieces;
 
 use crate::board::Taken;
-pub use crate::pieces::components::is_move_valid;
 use crate::pieces::Piece;
 
 mod creation;
