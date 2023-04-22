@@ -16,12 +16,19 @@ impl Plugin for HistoryPlugin {
 
 struct Movement {
     piece: Piece,
-    square: Square,
+    origin: Square,
+    destination: Square,
+    taken: Option<Piece>,
 }
 
 impl Movement {
-    fn new(piece: Piece, square: Square) -> Movement {
-        Movement { piece, square }
+    fn new(piece: Piece, origin: Square, destination: Square, taken: Option<Piece>) -> Movement {
+        Movement {
+            piece,
+            origin,
+            destination,
+            taken,
+        }
     }
 }
 
@@ -30,11 +37,22 @@ struct MoveHistory {
     history: Vec<Movement>,
 }
 
-fn record_move(mut move_event: EventReader<MoveMadeEvent>, mut history: ResMut<MoveHistory>) {
+fn record_move(
+    mut move_event: EventReader<MoveMadeEvent>,
+    mut history: ResMut<MoveHistory>,
+    pieces: Query<&Piece>,
+) {
     for event in move_event.iter() {
-        history
-            .history
-            .push(Movement::new(event.piece, event.square));
+        let piece = pieces
+            .get(event.piece)
+            .expect("unable to find moving piece");
+        let taken = event.taken.map(|entity| *pieces.get(entity).expect("unable to find taken piece"));
+        history.history.push(Movement::new(
+            *piece,
+            event.origin,
+            event.destination,
+            taken,
+        ));
     }
 }
 
@@ -43,8 +61,9 @@ fn display_move_history(history: ResMut<MoveHistory>) {
         return;
     }
 
-    history
-        .history
-        .iter()
-        .for_each(|Movement { piece, square }| println!("piece: {piece:?} to {square:?}"));
+    history.history.iter().for_each(
+        |Movement {
+             piece, destination, origin, ..
+         }| println!("piece: {piece:?} move from {origin:?} to {destination:?}"),
+    );
 }

@@ -179,9 +179,10 @@ fn spawn_piece(
                 colour: piece_colour,
                 piece_type: (&piece).into(), // from impl on ref to allow mesh to be reused later
                 pos: Square {
-                    x: position.x as i8,
-                    y: position.z as i8,
+                    file: position.x as i8,
+                    rank: position.z as i8,
                 },
+                has_moved: false,
             },
         ))
         .with_children(|parent| {

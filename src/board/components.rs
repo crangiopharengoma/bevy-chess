@@ -13,41 +13,41 @@ pub struct Taken {
 #[derive(Clone, Copy, Component, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Square {
-    pub x: i8,
-    pub y: i8,
+    pub file: i8,
+    pub rank: i8,
 }
 
 impl Square {
     pub fn is_white(&self) -> bool {
-        (self.x + self.y + 1) % 2 == 0
+        (self.file + self.rank + 1) % 2 == 0
     }
 
     /// Returns true if `other` is adjacent to `self`. Adjacency includes diagonals
     ///
     /// Note: returns false if other == self
     pub fn is_adjacent(&self, other: &Square) -> bool {
-        (self.x - other.x).abs() <= 1 && (self.y - other.y).abs() <= 1
+        (self.file - other.file).abs() <= 1 && (self.rank - other.rank).abs() <= 1
     }
 
     /// Returns true if `other` is in the same rank as `self`
     ///
     /// Note: returns true if other == self
     pub fn is_same_rank(&self, other: &Square) -> bool {
-        self.y == other.y
+        self.rank == other.rank
     }
 
     /// Returns true if `other` is in the same file as `self`
     ///
     /// Note: returns true if other == self
     pub fn is_same_file(&self, other: &Square) -> bool {
-        self.x == other.x
+        self.file == other.file
     }
 
     /// Returns true if `other` is on the same diagonal as `self`
     ///
     /// Note: returns true if other == self
     pub fn is_same_diagonal(&self, other: &Square) -> bool {
-        (self.x - other.x).abs() == (self.y - other.y).abs()
+        (self.file - other.file).abs() == (self.rank - other.rank).abs()
     }
 
     /// Checks if a piece in the supplied slice of `Piece` occupies the current square
@@ -65,7 +65,7 @@ impl Square {
     ///
     /// True means x and y are both between 0 and 7
     pub fn is_valid(&self) -> bool {
-        self.x >= 0 && self.x < 8 && self.y >= 0 && self.y < 8
+        self.file >= 0 && self.file < 8 && self.rank >= 0 && self.rank < 8
     }
 
     /// Fallible add operation
@@ -96,14 +96,14 @@ impl Add<(i8, i8)> for &Square {
 
     fn add(self, (rhs_x, rhs_y): (i8, i8)) -> Self::Output {
         Square {
-            x: self.x + rhs_x,
-            y: self.y + rhs_y,
+            file: self.file + rhs_x,
+            rank: self.rank + rhs_y,
         }
     }
 }
 
 impl From<(i8, i8)> for Square {
     fn from((x, y): (i8, i8)) -> Self {
-        Square { x, y }
+        Square { file: x, rank: y }
     }
 }

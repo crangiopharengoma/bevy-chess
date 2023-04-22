@@ -8,9 +8,9 @@ use bevy_mod_picking::{
 use crate::board::components::{Square, Taken};
 use crate::board::events::{MoveMadeEvent, ResetSelectedEvent};
 use crate::board::resources::{
-    Graveyard, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
+    Graveyard, MoveStack, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
 };
-use crate::pieces::{Piece, PieceType};
+use crate::pieces::{Piece, PieceColour, PieceType};
 
 pub fn create_board(
     mut commands: Commands,
@@ -24,7 +24,7 @@ pub fn create_board(
 
     for i in 0..8 {
         for j in 0..8 {
-            let square = Square { x: i, y: j };
+            let square = Square { file: i, rank: j };
             let initial_material = if square.is_white() {
                 square_materials.white_colour.clone()
             } else {
@@ -44,7 +44,7 @@ pub fn create_board(
                     pressed: None,
                     selected: Some(square_materials.selected_colour.clone()),
                 },
-                Square { x: i, y: j },
+                Square { file: i, rank: j },
             ));
         }
     }
@@ -78,6 +78,7 @@ pub fn select_square(
 pub fn colour_moves(
     selected_piece: Res<SelectedPiece>,
     materials: Res<SquareMaterials>,
+    move_stack: Res<MoveStack>,
     pieces: Query<&Piece, Without<Taken>>,
     mut squares: Query<(&Square, &mut Handle<StandardMaterial>, &Selection, &Hover)>,
 ) {
@@ -85,7 +86,12 @@ pub fn colour_moves(
         let piece = pieces.get(piece_entity).expect("unable to retrieve entity");
         let pieces_vec: Vec<_> = pieces.iter().copied().collect();
 
-        piece.legal_moves(&pieces_vec)
+        let last_move = move_stack.stack.last().map(|move_event| {
+            let last_piece = pieces.get(move_event.piece).unwrap();
+            (*last_piece, move_event.origin, move_event.destination)
+        });
+
+        piece.legal_moves(&pieces_vec, last_move)
     } else {
         HashSet::new()
     };
@@ -142,6 +148,7 @@ pub fn move_piece(
     selected_piece: Res<SelectedPiece>,
     mut turn: ResMut<PlayerTurn>,
     mut graveyard: ResMut<Graveyard>,
+    move_stack: Res<MoveStack>,
     squares: Query<&Square>,
     mut pieces: Query<(Entity, &mut Piece), Without<Taken>>,
     mut reset_selected_event: EventWriter<ResetSelectedEvent>,
@@ -164,35 +171,74 @@ pub fn move_piece(
         // a piece is selected, so lets move it
         let pieces_vec: Vec<_> = pieces.iter_mut().map(|(_, piece)| *piece).collect();
 
-        // this requires a mutable borrow so needs to be done before retrieve the piece that is moving
+        // taken_piece and last_move borrow pieces immutably so need to complete before we mutably retrieve piece_entity
         let taken_piece = pieces
             .iter_mut()
             .find(|(_, taken_piece)| taken_piece.pos == *square)
             .map(|(entity, _)| entity);
 
+        let (last_move, may_take_en_passant) =
+            if let Some(last_move_event) = move_stack.stack.last() {
+                let (_, last_piece) = pieces.get(last_move_event.piece).unwrap();
+                let last_move = Some((
+                    *last_piece,
+                    last_move_event.origin,
+                    last_move_event.destination,
+                ));
+
+                let may_take_en_passant = if pieces
+                    .get(piece_entity)
+                    .unwrap()
+                    .1
+                    .may_take_en_passant(square, &last_move)
+                {
+                    Some(last_move_event.piece)
+                } else {
+                    None
+                };
+
+                (last_move, may_take_en_passant)
+            } else {
+                (None, None)
+            };
+
         if let Ok((_, mut piece)) = pieces.get_mut(piece_entity) {
-            if piece.legal_moves(&pieces_vec).contains(square) {
-                // if piece.is_move_valid(*square, pieces_vec) {
+            if piece.legal_moves(&pieces_vec, last_move).contains(square) {
                 // take
                 if let Some(entity) = taken_piece {
                     commands.entity(entity).insert(Taken {
                         grave: graveyard.next(piece.colour),
                     });
+                } else if let Some(ep_taken) = may_take_en_passant {
+                    commands.entity(ep_taken).insert(Taken {
+                        grave: graveyard.next(piece.colour),
+                    });
                 }
+
+                // raise event before move actually happens to make it easier to capture origin
+                move_made_event.send(MoveMadeEvent {
+                    piece: piece_entity,
+                    destination: *square,
+                    origin: piece.pos,
+                    taken: taken_piece,
+                });
 
                 // move
                 piece.pos = *square;
+                piece.has_moved = true;
 
                 // switch turn to opponent
                 turn.change();
-                move_made_event.send(MoveMadeEvent {
-                    piece: *piece,
-                    square: *square,
-                });
             }
         }
 
         reset_selected_event.send(ResetSelectedEvent);
+    }
+}
+
+pub fn push_move(mut stack: ResMut<MoveStack>, mut move_events: EventReader<MoveMadeEvent>) {
+    for move_event in move_events.iter() {
+        stack.stack.push(*move_event);
     }
 }
 
@@ -209,7 +255,6 @@ pub fn remove_taken_pieces(
         }
 
         let direction = taken.grave - transform.translation;
-        // TODO handle piece square not being reset
 
         if direction.length() > 0.1 {
             transform.translation += direction.normalize() * time.delta_seconds() * 5.0;

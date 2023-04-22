@@ -1,6 +1,12 @@
 use bevy::prelude::*;
 
+use crate::board::MoveMadeEvent;
 use crate::pieces::PieceColour;
+
+#[derive(Resource, Default)]
+pub struct MoveStack {
+    pub stack: Vec<MoveMadeEvent>,
+}
 
 #[derive(Resource)]
 pub struct SquareMaterials {
