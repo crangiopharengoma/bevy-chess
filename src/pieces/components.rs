@@ -71,7 +71,7 @@ impl Piece {
         (2, -1),
         (-2, -1),
     ];
-    const KING_OFFSETS: [(i8, i8); 8] = [
+    const KING_OFFSETS: [(i8, i8); 10] = [
         (0, 1),
         (0, -1),
         (1, 1),
@@ -80,6 +80,8 @@ impl Piece {
         (-1, -1),
         (1, 0),
         (-1, 0),
+        (0, 2),  // castle
+        (0, -2), // queen side castle
     ];
     const BISHOP_OFFSETS: [(i8, i8); 4] = [(1, 1), (-1, -1), (-1, 1), (1, -1)];
     const ROOK_OFFSETS: [(i8, i8); 4] = [(0, 1), (0, -1), (1, 0), (-1, 0)];
@@ -93,9 +95,16 @@ impl Piece {
     ///
     /// The previous move is required for en passant
     pub fn legal_moves(&self, pieces: &[Piece], last_move: Option<MoveRecord>) -> HashSet<Square> {
+        // println!("Assessing legal moves for {self:?}");
         self.get_move_set()
             .into_iter()
             .filter(|destination| {
+                // println!("Move to {destination:?}");
+                // dbg!(
+                //     self.has_clear_path(destination, pieces),
+                //     self.piece_specfic_rules(destination, pieces, &last_move),
+                //     self.avoids_check(destination, pieces, &last_move)
+                // );
                 self.has_clear_path(destination, pieces)
                     && self.piece_specfic_rules(destination, pieces, &last_move)
                     && self.avoids_check(destination, pieces, &last_move)
@@ -116,7 +125,7 @@ impl Piece {
     /// Validates that the movement obeys the various piece specific rules that exist, e.g.
     /// - Pawns may only take on diagonals
     /// - Pawns may only move two steps on their first movement
-    /// - Pawns may take en passant (not yet implemented)
+    /// - Pawns may take en passant
     /// - The King may castle (not yet implemented)
     ///
     /// Note that knight movement rules are baked into the is_path_empty method checks rather than
@@ -128,7 +137,7 @@ impl Piece {
         last_move: &Option<MoveRecord>,
     ) -> bool {
         match self.piece_type {
-            // PieceType::King => is_valid_for_king(self, new_position),
+            PieceType::King => is_valid_for_king(self, new_position, pieces),
             // PieceType::Queen => is_valid_for_queen(self, new_position, pieces),
             // PieceType::Bishop => is_valid_for_bishop(self, new_position, pieces),
             // PieceType::Knight => is_valid_for_knight(self, new_position),
@@ -147,6 +156,7 @@ impl Piece {
         pieces: &[Piece],
         last_move: &Option<MoveRecord>,
     ) -> bool {
+        // TODO condense pieces logic into single iterator
         let mut pieces = pieces.to_vec();
 
         pieces
@@ -165,10 +175,33 @@ impl Piece {
             .find(|piece| piece.colour == self.colour && piece.piece_type == PieceType::King)
             .expect("unable to find king");
 
-        !pieces
+        let safe = !pieces
             .iter()
             .filter(|piece| piece.colour != self.colour)
-            .any(|piece| piece.is_move_valid(&own_king.pos, &pieces, last_move))
+            .any(|piece| {
+                piece.is_move_valid(
+                    &own_king.pos,
+                    &pieces,
+                    &Some((*self, self.pos, *new_position)),
+                )
+            });
+
+        // if !safe {
+        //     let threats: Vec<_> = pieces
+        //         .iter()
+        //         .filter(|piece| {
+        //             piece.colour != self.colour
+        //                 && piece.is_move_valid(
+        //                     &own_king.pos,
+        //                     &pieces,
+        //                     &Some((*self, self.pos, *new_position)),
+        //                 )
+        //         })
+        //         .collect();
+        //     dbg!(threats);
+        // }
+
+        safe
     }
 
     /// Checks if it is a valid move for self to move to `Square` given the current position of each
@@ -191,7 +224,7 @@ impl Piece {
         }
 
         match self.piece_type {
-            PieceType::King => is_valid_for_king(self, new_position),
+            PieceType::King => is_valid_for_king(self, new_position, pieces),
             PieceType::Queen => is_valid_for_queen(self, new_position, pieces),
             PieceType::Bishop => is_valid_for_bishop(self, new_position, pieces),
             PieceType::Knight => is_valid_for_knight(self, new_position),
@@ -263,18 +296,120 @@ impl Piece {
             false
         } else if let Some((prev_piece, last_move_origin, last_move_destination)) = last_move {
             prev_piece.piece_type == PieceType::Pawn
-                && (last_move_origin.file - last_move_destination.file).abs() == 2
-                && (last_move_destination.file - new_position.file).abs() == 1
-                && (last_move_destination.rank == new_position.rank)
+                && (last_move_origin.rank - last_move_destination.rank).abs() == 2 // last move was pawn double step
+                && (last_move_destination.file - self.pos.file).abs() == 1     // last move was pawn in adjacent file
+                && last_move_destination.rank == self.pos.rank // pawn is currently in the same rank
+                && new_position.file == last_move_destination.file // move is into the file of the moving pawn (i.e. diagonal)
+                && (new_position.rank - last_move_destination.rank).abs() == 1 // move is into the rank behind the moving pawn
         } else {
             false
         }
     }
+
+    /// Tests whether the piece may legally castle to `new_position` with the board state `pieces`
+    ///
+    /// Will always return false if the piece is not a King
+    ///
+    /// Otherwise will return true if the King may castle to that location
+    ///
+    /// Legal castling requires:
+    /// - Neither the rook nor the King have moved
+    /// - None of the squares on the path that the King moves through are threatened
+    ///
+    /// Note
+    /// - The rook may be threatened at the start of the movement (as the King's path does not
+    /// include this space)
+    /// - Castling is legal on both King and Queen side of the board. This method will return
+    /// true for either side with no further distinction
+    pub fn may_castle(&self, new_position: &Square, pieces: &[Piece]) -> bool {
+        if !self.has_moved
+            && self.piece_type == PieceType::King
+            && self.pos.rank == new_position.rank
+        // when avoid_check checks this method is called without checking if it's a legal space (because that causes unbounded recursion), so this method can be reached, so we need to double check
+        {
+            pieces
+                .iter()
+                .filter(|oth_piece| {
+                    oth_piece.piece_type == PieceType::Rook
+                        && oth_piece.colour == self.colour
+                        && !oth_piece.has_moved
+                })
+                .any(|rook| {
+                    // separate checks for queenside/kingside castling
+                    if new_position.file == 2 {
+                        rook.pos.file == 0 && is_path_empty(&self.pos, new_position, pieces)
+                    } else {
+                        rook.pos.file == 7 && is_path_empty(&self.pos, new_position, pieces)
+                    }
+                })
+                && self.no_check_in_path(new_position, pieces)
+        } else {
+            false
+        }
+    }
+
+    fn no_check_in_path(&self, new_position: &Square, pieces: &[Piece]) -> bool {
+        // println!("checking path to {new_position:?}");
+        let path: Vec<Square> = (0..3)
+            .map(|step| {
+                let direction = if new_position.file > self.pos.file {
+                    1
+                } else {
+                    -1
+                };
+                Square {
+                    rank: self.pos.rank,
+                    file: self.pos.file + (step * direction),
+                }
+            })
+            .collect();
+        // dbg!(&path);
+        let res = !pieces
+            .iter()
+            .filter(|opp_piece| {
+                opp_piece.colour == self.colour.opponent()
+                    && opp_piece.piece_type != PieceType::King // FIXME king excluded to prevent endless recursion which means some illegal positions are now possible
+            })
+            .any(|opp_piece| {
+                path.iter().any(|path_sq| {
+                    opp_piece.is_move_valid(
+                        path_sq,
+                        pieces,
+                        &Some((*self, self.pos, *new_position)),
+                    )
+                })
+            });
+
+        // dbg!(&res);
+        res
+    }
 }
 
-fn is_valid_for_king(piece: &Piece, new_position: &Square) -> bool {
-    piece.pos.is_adjacent(new_position)
-    // TODO castling
+fn is_valid_for_king(piece: &Piece, new_position: &Square, pieces: &[Piece]) -> bool {
+    let is_adjacent = piece.pos.is_adjacent(new_position);
+    let is_castling = piece.may_castle(new_position, pieces);
+    // dbg!(new_position, &is_adjacent, &is_castling);
+    is_adjacent || is_castling
+
+    // let is_adjacent = piece.pos.is_adjacent(new_position);
+
+    // if !piece.has_moved {
+    //     return pieces
+    //         .iter()
+    //         .filter(|oth_piece| {
+    //             oth_piece.piece_type == PieceType::Rook
+    //                 && oth_piece.colour == PieceColour::White
+    //                 && !oth_piece.has_moved
+    //         })
+    //         .any(|rook| {
+    //             (rook.pos.rank - new_position.rank).abs() == 1
+    //                 && is_path_empty(&piece.pos, new_position, pieces)
+    //             // TODO check for moving through/out of check
+    //         })
+    //         || is_adjacent;
+    // }
+
+    // is_adjacent
 }
 
 fn is_valid_for_queen(piece: &Piece, new_position: &Square, pieces: &[Piece]) -> bool {
@@ -294,10 +429,10 @@ fn is_valid_for_rook(piece: &Piece, new_position: &Square, pieces: &[Piece]) -> 
 }
 
 fn is_valid_for_knight(piece: &Piece, new_position: &Square) -> bool {
-    ((piece.pos.file - new_position.file).abs() == 2
-        && (piece.pos.rank - new_position.rank).abs() == 1)
-        || ((piece.pos.file - new_position.file).abs() == 1
-            && (piece.pos.rank - new_position.rank).abs() == 2)
+    ((piece.pos.rank - new_position.rank).abs() == 2
+        && (piece.pos.file - new_position.file).abs() == 1)
+        || ((piece.pos.rank - new_position.rank).abs() == 1
+            && (piece.pos.file - new_position.file).abs() == 2)
 }
 
 fn is_valid_for_pawn(
@@ -312,24 +447,24 @@ fn is_valid_for_pawn(
     };
 
     // Standard
-    if new_position.file - piece.pos.file == movement_direction
-        && piece.pos.rank == new_position.rank
+    if new_position.rank - piece.pos.rank == movement_direction
+        && piece.pos.file == new_position.file
     {
         return new_position.is_occupied(pieces).is_none();
     }
 
     // Starting
-    if piece.pos.file == start_x
-        && new_position.file - piece.pos.file == (2 * movement_direction)
-        && piece.pos.rank == new_position.rank
+    if !piece.has_moved
+        && new_position.rank - piece.pos.rank == (2 * movement_direction)
+        && piece.pos.file == new_position.file
         && is_path_empty(&piece.pos, new_position, pieces)
     {
         return new_position.is_occupied(pieces).is_none();
     }
 
     // Taking
-    let may_take = if new_position.file - piece.pos.file == movement_direction
-        && (piece.pos.rank - new_position.rank).abs() == 1
+    let may_take = if new_position.rank - piece.pos.rank == movement_direction
+        && (piece.pos.file - new_position.file).abs() == 1
     {
         new_position.is_occupied(pieces) == Some(piece.colour.opponent())
     } else {
@@ -344,37 +479,37 @@ fn is_valid_for_pawn(
 /// This method will accurately search both straight (rank or file) and diagonal paths,
 /// but it will not validate that the path is one of those three
 fn is_path_empty(begin: &Square, end: &Square, pieces: &[Piece]) -> bool {
-    if begin.file == end.file {
+    if begin.rank == end.rank {
         // moving along a rank
-        !pieces.iter().any(|piece| {
-            piece.pos.file == begin.file
-                && ((piece.pos.rank > begin.rank && piece.pos.rank < end.rank)
-                    || (piece.pos.rank > end.rank && piece.pos.rank < begin.rank))
-        })
-    } else if begin.rank == end.rank {
-        // moving along a file
         !pieces.iter().any(|piece| {
             piece.pos.rank == begin.rank
                 && ((piece.pos.file > begin.file && piece.pos.file < end.file)
                     || (piece.pos.file > end.file && piece.pos.file < begin.file))
         })
+    } else if begin.file == end.file {
+        // moving along a file
+        !pieces.iter().any(|piece| {
+            piece.pos.file == begin.file
+                && ((piece.pos.rank > begin.rank && piece.pos.rank < end.rank)
+                    || (piece.pos.rank > end.rank && piece.pos.rank < begin.rank))
+        })
     } else {
         // diagonal
-        let (x_diff, y_diff) = ((begin.file - end.file).abs(), (begin.rank - end.rank).abs());
+        let (x_diff, y_diff) = ((begin.rank - end.rank).abs(), (begin.file - end.file).abs());
         if x_diff == y_diff {
             for i in 1..x_diff {
-                let pos: Square = if begin.file < end.file && begin.rank < end.rank {
+                let pos: Square = if begin.rank < end.rank && begin.file < end.file {
                     // left bottom - right top
-                    (begin.file + i, begin.rank + i).into()
-                } else if begin.file < end.file && begin.rank > end.rank {
+                    (begin.rank + i, begin.file + i).into()
+                } else if begin.rank < end.rank && begin.file > end.file {
                     // left top - right bottom
-                    (begin.file + i, begin.rank - i).into()
-                } else if begin.file > end.file && begin.rank < end.rank {
+                    (begin.rank + i, begin.file - i).into()
+                } else if begin.rank > end.rank && begin.file < end.file {
                     // right bottom - left top
-                    (begin.file - i, begin.rank + i).into()
+                    (begin.rank - i, begin.file + i).into()
                 } else {
                     // right top to left bottom
-                    (begin.file - i, begin.rank - i).into()
+                    (begin.rank - i, begin.file - i).into()
                 };
 
                 if pos.is_occupied(pieces).is_some() {

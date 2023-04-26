@@ -29,6 +29,7 @@ impl Plugin for BoardPlugin {
             .add_system(systems::select_square)
             .add_system(systems::select_piece)
             .add_system(systems::move_piece.before(systems::select_piece)) // if select piece happens first move piece can deselect the selected piece, causing nothing to happen
+            .add_system(systems::make_move)
             .add_system(systems::remove_taken_pieces)
             .add_system(systems::reset_selected)
             .add_system(systems::colour_moves)

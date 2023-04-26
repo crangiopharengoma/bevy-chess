@@ -10,23 +10,28 @@ pub struct Taken {
     pub grave: Vec3,
 }
 
+#[derive(Component)]
+pub struct Move {
+    pub square: Square,
+}
+
 #[derive(Clone, Copy, Component, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Square {
-    pub file: i8,
     pub rank: i8,
+    pub file: i8,
 }
 
 impl Square {
     pub fn is_white(&self) -> bool {
-        (self.file + self.rank + 1) % 2 == 0
+        (self.rank + self.file + 1) % 2 == 0
     }
 
     /// Returns true if `other` is adjacent to `self`. Adjacency includes diagonals
     ///
     /// Note: returns false if other == self
     pub fn is_adjacent(&self, other: &Square) -> bool {
-        (self.file - other.file).abs() <= 1 && (self.rank - other.rank).abs() <= 1
+        (self.rank - other.rank).abs() <= 1 && (self.file - other.file).abs() <= 1
     }
 
     /// Returns true if `other` is in the same rank as `self`
@@ -47,7 +52,7 @@ impl Square {
     ///
     /// Note: returns true if other == self
     pub fn is_same_diagonal(&self, other: &Square) -> bool {
-        (self.file - other.file).abs() == (self.rank - other.rank).abs()
+        (self.rank - other.rank).abs() == (self.file - other.file).abs()
     }
 
     /// Checks if a piece in the supplied slice of `Piece` occupies the current square
@@ -65,7 +70,7 @@ impl Square {
     ///
     /// True means x and y are both between 0 and 7
     pub fn is_valid(&self) -> bool {
-        self.file >= 0 && self.file < 8 && self.rank >= 0 && self.rank < 8
+        self.rank >= 0 && self.rank < 8 && self.file >= 0 && self.file < 8
     }
 
     /// Fallible add operation
@@ -96,14 +101,14 @@ impl Add<(i8, i8)> for &Square {
 
     fn add(self, (rhs_x, rhs_y): (i8, i8)) -> Self::Output {
         Square {
-            file: self.file + rhs_x,
-            rank: self.rank + rhs_y,
+            rank: self.rank + rhs_x,
+            file: self.file + rhs_y,
         }
     }
 }
 
 impl From<(i8, i8)> for Square {
     fn from((x, y): (i8, i8)) -> Self {
-        Square { file: x, rank: y }
+        Square { rank: x, file: y }
     }
 }

@@ -46,7 +46,9 @@ fn record_move(
         let piece = pieces
             .get(event.piece)
             .expect("unable to find moving piece");
-        let taken = event.taken.map(|entity| *pieces.get(entity).expect("unable to find taken piece"));
+        let taken = event
+            .taken
+            .map(|entity| *pieces.get(entity).expect("unable to find taken piece"));
         history.history.push(Movement::new(
             *piece,
             event.origin,
@@ -63,7 +65,10 @@ fn display_move_history(history: ResMut<MoveHistory>) {
 
     history.history.iter().for_each(
         |Movement {
-             piece, destination, origin, ..
+             piece,
+             destination,
+             origin,
+             ..
          }| println!("piece: {piece:?} move from {origin:?} to {destination:?}"),
     );
 }
