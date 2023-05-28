@@ -3,10 +3,13 @@ use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, Se
 
 pub use movement::{colour_moves, make_move, move_piece, push_move, remove_taken_pieces};
 
-use crate::board::components::{Square, Taken};
+use crate::board::components::{Move, Square, Taken};
 use crate::board::events::ResetSelectedEvent;
-use crate::board::resources::{PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials};
-use crate::pieces::Piece;
+use crate::board::resources::{
+    DrawReason, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
+};
+use crate::board::{GameStatus, MoveMadeEvent};
+use crate::pieces::{Piece, PieceColour, PieceType};
 
 mod movement;
 
@@ -117,4 +120,90 @@ pub fn reset_selected(
         selected_square.entity = None;
         selected_piece.entity = None;
     }
+}
+
+pub fn update_status(
+    mut game_status: ResMut<GameStatus>,
+    mut turn: ResMut<PlayerTurn>,
+    mut last_action: Local<i32>,
+    mut event_reader: EventReader<MoveMadeEvent>,
+    pieces: Query<(&Piece, Option<&Move>), Without<Taken>>,
+) {
+    for event in event_reader.iter() {
+        let pieces_vec: Vec<_> = pieces
+            .iter()
+            .map(|(piece, move_opt)| match move_opt {
+                None => *piece,
+                Some(movement) => {
+                    let mut piece = *piece;
+                    piece.pos = movement.square;
+                    piece.has_moved = true;
+                    piece
+                }
+            })
+            .collect();
+        let moving_piece = pieces.get(event.piece).map(|(piece, _)| piece).unwrap();
+
+        if moving_piece.piece_type == PieceType::Pawn || event.is_take() {
+            *last_action = 0
+        } else {
+            *last_action += 1
+        }
+        dbg!(&last_action);
+
+        let last_move = Some((*moving_piece, event.origin, event.destination));
+        let has_moves = player_has_moves(turn.0.opponent(), &pieces_vec, &pieces_vec, last_move);
+        let check = is_in_check(turn.0.opponent(), &pieces_vec, &pieces_vec, last_move);
+
+        *game_status = if check && !has_moves {
+            GameStatus::Checkmate
+        } else if *last_action == 50 {
+            GameStatus::Draw(DrawReason::FiftyMoveRule)
+        } else if check & has_moves {
+            turn.change();
+            GameStatus::Check
+        } else if !check && !has_moves {
+            GameStatus::Draw(DrawReason::Stalemate)
+        } else {
+            // TODO other draw conditions
+            turn.change();
+            GameStatus::OnGoing
+        };
+    }
+}
+
+fn is_in_check(
+    player_colour: PieceColour,
+    pieces: &[Piece],
+    pieces_vec: &[Piece],
+    last_move: Option<(Piece, Square, Square)>,
+) -> bool {
+    let own_king = pieces_vec
+        .iter()
+        .find(|piece| piece.colour == player_colour && piece.piece_type == PieceType::King)
+        .unwrap();
+
+    // FIXME a pinned piece still gives check even though it's not considered a legal move
+    pieces
+        .iter()
+        .filter(|piece| piece.colour == player_colour.opponent())
+        .any(|piece| {
+            piece
+                .legal_moves(pieces_vec, last_move)
+                .contains(&own_king.pos)
+        })
+}
+
+fn player_has_moves(
+    player_colour: PieceColour,
+    pieces: &[Piece],
+    pieces_vec: &[Piece],
+    last_move: Option<(Piece, Square, Square)>,
+) -> bool {
+    pieces
+        .iter()
+        .filter(|piece| piece.colour == player_colour)
+        .flat_map(|piece| piece.legal_moves(pieces_vec, last_move))
+        .count()
+        > 0
 }

@@ -1,6 +1,6 @@
-use crate::board::PlayerTurn;
-use crate::pieces::PieceColour;
 use bevy::prelude::*;
+
+use crate::board::{DrawReason, GameStatus, PlayerTurn};
 
 pub struct UiPlugin;
 
@@ -17,19 +17,29 @@ impl Plugin for UiPlugin {
 struct NextMoveText;
 
 /// Updates the current move text based on the `PlayerTurn` resource
-fn next_move_text_update(turn: Res<PlayerTurn>, mut query: Query<(&mut Text, &NextMoveText)>) {
-    if !turn.is_changed() {
+fn next_move_text_update(
+    turn: Res<PlayerTurn>,
+    game_status: Res<GameStatus>,
+    mut query: Query<(&mut Text, &NextMoveText)>,
+) {
+    if !turn.is_changed() && !game_status.is_changed() {
         return;
     }
 
+    let piece_colour = turn.0;
     for (mut text, _) in query.iter_mut() {
-        text.sections[0].value = format!(
-            "Next move: {}",
-            match turn.0 {
-                PieceColour::White => "White",
-                PieceColour::Black => "Black",
+        text.sections[0].value = match *game_status {
+            GameStatus::NotStarted => "Next move: White".to_string(),
+            GameStatus::OnGoing => format!("Next move: {piece_colour}"),
+            GameStatus::Check => format!("Check! Next move: {piece_colour}"),
+            GameStatus::Checkmate => format!("Checkmate! {piece_colour} wins"),
+            GameStatus::Draw(DrawReason::FiftyMoveRule) => {
+                "Draw! Fifty consecutive moves without a capture or a pawn movement".to_string()
             }
-        );
+            GameStatus::Draw(DrawReason::Stalemate) => {
+                format!("Draw! Stalemate: {piece_colour} has no legal moves")
+            }
+        };
     }
 }
 

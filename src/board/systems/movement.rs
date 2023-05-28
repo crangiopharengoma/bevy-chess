@@ -9,7 +9,7 @@ use crate::board::components::Move;
 use crate::board::resources::{
     Graveyard, MoveStack, SelectedPiece, SelectedSquare, SquareMaterials,
 };
-use crate::board::{MoveMadeEvent, PlayerTurn, ResetSelectedEvent, Square, Taken};
+use crate::board::{MoveMadeEvent, ResetSelectedEvent, Square, Taken};
 use crate::pieces::{Piece, PieceType};
 
 pub fn push_move(mut stack: ResMut<MoveStack>, mut move_events: EventReader<MoveMadeEvent>) {
@@ -24,7 +24,6 @@ pub fn remove_taken_pieces(
     mut query: Query<(&Piece, &Taken, &mut Transform)>,
 ) {
     for (piece, taken, mut transform) in query.iter_mut() {
-        // TODO handle mate
         if piece.piece_type == PieceType::King {
             println!("{} won! Thanks for playing!", piece.colour);
             exit_event.send(AppExit);
@@ -76,12 +75,23 @@ pub fn colour_moves(
     }
 }
 
+pub fn make_move(
+    mut commands: Commands,
+    mut pieces: Query<(Entity, &mut Piece, &Move), Without<Taken>>,
+) {
+    for (entity, mut piece, movement) in pieces.iter_mut() {
+        piece.pos = movement.square;
+        piece.has_moved = true;
+
+        commands.entity(entity).remove::<Move>();
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn move_piece(
     mut commands: Commands,
     selected_square: Res<SelectedSquare>,
     selected_piece: Res<SelectedPiece>,
-    mut turn: ResMut<PlayerTurn>,
     mut graveyard: ResMut<Graveyard>,
     move_stack: Res<MoveStack>,
     squares: Query<&Square>,
@@ -114,8 +124,8 @@ pub fn move_piece(
             .legal_moves(&pieces_vec, last_move)
             .contains(square)
         {
-            let taken_piece =
-                find_taken_piece(&pieces, square, piece_entity, last_move_event, &last_move);
+            let (taken_piece, en_passant) =
+                try_get_taken_piece(&pieces, square, piece_entity, last_move_event, &last_move);
 
             if let Some(entity) = taken_piece {
                 commands.entity(entity).insert(Taken {
@@ -127,26 +137,53 @@ pub fn move_piece(
                 .entity(piece_entity)
                 .insert(Move { square: *square });
 
-            // if castling, move the associated rook
+            // if castling the rook need to move too
             if moving_piece.piece_type == PieceType::King
                 && (moving_piece.pos.file - square.file).abs() == 2
             {
                 move_castling_rook(&mut commands, &pieces, square, moving_piece);
+                move_made_event.send(MoveMadeEvent::castling(
+                    piece_entity,
+                    moving_piece.pos,
+                    *square,
+                ));
+            } else {
+                move_made_event.send(MoveMadeEvent::not_castling(
+                    piece_entity,
+                    moving_piece.pos,
+                    *square,
+                    taken_piece,
+                    en_passant,
+                ));
             }
-
-            // TODO castle event and maybe en_passant event
-            move_made_event.send(MoveMadeEvent {
-                piece: piece_entity,
-                destination: *square,
-                origin: moving_piece.pos,
-                taken: taken_piece,
-            });
-
-            turn.change();
         }
 
         reset_selected_event.send(ResetSelectedEvent);
     }
+}
+
+fn try_get_taken_piece(
+    pieces: &Query<(Entity, &Piece), Without<Taken>>,
+    square: &Square,
+    piece_entity: Entity,
+    last_move_event: Option<&MoveMadeEvent>,
+    last_move: &Option<(Piece, Square, Square)>,
+) -> (Option<Entity>, bool) {
+    let (taken_piece, en_passant) = {
+        let taken_piece = pieces
+            .iter()
+            .find(|(_, taken_piece)| taken_piece.pos == *square)
+            .map(|(entity, _)| entity);
+
+        if taken_piece.is_none() {
+            let taken_piece =
+                get_en_passant_piece(&pieces, square, piece_entity, last_move_event, &last_move);
+            (taken_piece, taken_piece.is_some())
+        } else {
+            (taken_piece, false)
+        }
+    };
+    (taken_piece, en_passant)
 }
 
 fn move_castling_rook(
@@ -174,34 +211,6 @@ fn move_castling_rook(
     commands.entity(rook_entity).insert(Move {
         square: rook_dest_square,
     });
-}
-
-pub fn make_move(
-    mut commands: Commands,
-    mut pieces: Query<(Entity, &mut Piece, &Move), Without<Taken>>,
-) {
-    for (entity, mut piece, movement) in pieces.iter_mut() {
-        piece.pos = movement.square;
-        piece.has_moved = true;
-
-        commands.entity(entity).remove::<Move>();
-    }
-}
-
-fn find_taken_piece(
-    pieces: &Query<(Entity, &Piece), Without<Taken>>,
-    square: &Square,
-    piece_entity: Entity,
-    last_move_event: Option<&MoveMadeEvent>,
-    last_move: &Option<(Piece, Square, Square)>,
-) -> Option<Entity> {
-    pieces
-        .iter()
-        .find(|(_, taken_piece)| taken_piece.pos == *square)
-        .map_or_else(
-            || get_en_passant_piece(pieces, square, piece_entity, last_move_event, last_move),
-            |(entity, _)| Some(entity),
-        )
 }
 
 fn get_en_passant_piece(

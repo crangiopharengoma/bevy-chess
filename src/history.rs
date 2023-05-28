@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::board::{MoveMadeEvent, Square};
+use crate::board::{MoveMadeEvent, MoveType, Square};
 use crate::pieces::Piece;
 
 pub struct HistoryPlugin;
@@ -46,9 +46,12 @@ fn record_move(
         let piece = pieces
             .get(event.piece)
             .expect("unable to find moving piece");
-        let taken = event
-            .taken
-            .map(|entity| *pieces.get(entity).expect("unable to find taken piece"));
+        let taken =
+            if let MoveType::Take(entity) | MoveType::TakeEnPassant(entity) = event.move_type {
+                Some(*pieces.get(entity).expect("unable to find taken piece);"))
+            } else {
+                None
+            };
         history.history.push(Movement::new(
             *piece,
             event.origin,
@@ -68,7 +71,13 @@ fn display_move_history(history: ResMut<MoveHistory>) {
              piece,
              destination,
              origin,
-             ..
-         }| println!("piece: {piece:?} move from {origin:?} to {destination:?}"),
+             taken
+         }| {
+            if let Some(taken_piece) = taken {
+                println!("piece: {piece:?} move from {origin:?} to {destination:?}, taking {taken_piece:?}");
+            } else {
+                println!("piece: {piece:?} move from {origin:?} to {destination:?}");
+            }
+        }
     );
 }

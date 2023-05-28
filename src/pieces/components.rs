@@ -23,6 +23,15 @@ impl PieceColour {
             PieceColour::Black => PieceColour::White,
         }
     }
+
+    /// Returns the standard direction of pawn movement for the colour (i.e. 1 for `White` -1 for
+    /// `Black`)
+    pub fn pawn_movement_direction(&self) -> i8 {
+        match self {
+            PieceColour::White => 1,
+            PieceColour::Black => -1,
+        }
+    }
 }
 
 impl Display for PieceColour {
@@ -95,19 +104,12 @@ impl Piece {
     ///
     /// The previous move is required for en passant
     pub fn legal_moves(&self, pieces: &[Piece], last_move: Option<MoveRecord>) -> HashSet<Square> {
-        // println!("Assessing legal moves for {self:?}");
         self.get_move_set()
             .into_iter()
             .filter(|destination| {
-                // println!("Move to {destination:?}");
-                // dbg!(
-                //     self.has_clear_path(destination, pieces),
-                //     self.piece_specfic_rules(destination, pieces, &last_move),
-                //     self.avoids_check(destination, pieces, &last_move)
-                // );
                 self.has_clear_path(destination, pieces)
                     && self.piece_specfic_rules(destination, pieces, &last_move)
-                    && self.avoids_check(destination, pieces, &last_move)
+                    && self.avoids_check(destination, pieces)
             })
             .collect()
     }
@@ -150,24 +152,21 @@ impl Piece {
     /// Tests is moving to a new position will result in check. Returns true if a move is 'safe'
     ///
     /// This method relies on a call to `is_move_valid` so kept separate to avoid recursion nightmares
-    fn avoids_check(
-        &self,
-        new_position: &Square,
-        pieces: &[Piece],
-        last_move: &Option<MoveRecord>,
-    ) -> bool {
-        // TODO condense pieces logic into single iterator
-        let mut pieces = pieces.to_vec();
-
-        pieces
-            .iter_mut()
-            .find(|piece| piece.pos == self.pos)
-            .unwrap()
-            .pos = *new_position;
-
-        let pieces: Vec<_> = pieces
-            .into_iter()
-            .filter(|piece| piece.colour == self.colour || &piece.pos != new_position)
+    fn avoids_check(&self, new_position: &Square, pieces: &[Piece]) -> bool {
+        // updates the position of the moving piece and filters out the taken piece (if any)
+        let pieces: Vec<Piece> = pieces
+            .iter()
+            .filter_map(|piece| {
+                if piece.pos == self.pos {
+                    let mut piece = *piece;
+                    piece.pos = *new_position;
+                    Some(piece)
+                } else if piece.colour == self.colour || &piece.pos != new_position {
+                    Some(*piece)
+                } else {
+                    None
+                }
+            })
             .collect();
 
         let own_king = pieces
@@ -175,7 +174,7 @@ impl Piece {
             .find(|piece| piece.colour == self.colour && piece.piece_type == PieceType::King)
             .expect("unable to find king");
 
-        let safe = !pieces
+        !pieces
             .iter()
             .filter(|piece| piece.colour != self.colour)
             .any(|piece| {
@@ -184,24 +183,7 @@ impl Piece {
                     &pieces,
                     &Some((*self, self.pos, *new_position)),
                 )
-            });
-
-        // if !safe {
-        //     let threats: Vec<_> = pieces
-        //         .iter()
-        //         .filter(|piece| {
-        //             piece.colour != self.colour
-        //                 && piece.is_move_valid(
-        //                     &own_king.pos,
-        //                     &pieces,
-        //                     &Some((*self, self.pos, *new_position)),
-        //                 )
-        //         })
-        //         .collect();
-        //     dbg!(threats);
-        // }
-
-        safe
+            })
     }
 
     /// Checks if it is a valid move for self to move to `Square` given the current position of each
@@ -349,7 +331,6 @@ impl Piece {
     }
 
     fn no_check_in_path(&self, new_position: &Square, pieces: &[Piece]) -> bool {
-        // println!("checking path to {new_position:?}");
         let path: Vec<Square> = (0..3)
             .map(|step| {
                 let direction = if new_position.file > self.pos.file {
@@ -363,8 +344,8 @@ impl Piece {
                 }
             })
             .collect();
-        // dbg!(&path);
-        let res = !pieces
+
+        !pieces
             .iter()
             .filter(|opp_piece| {
                 opp_piece.colour == self.colour.opponent()
@@ -378,38 +359,12 @@ impl Piece {
                         &Some((*self, self.pos, *new_position)),
                     )
                 })
-            });
-
-        // dbg!(&res);
-        res
+            })
     }
 }
 
 fn is_valid_for_king(piece: &Piece, new_position: &Square, pieces: &[Piece]) -> bool {
-    let is_adjacent = piece.pos.is_adjacent(new_position);
-    let is_castling = piece.may_castle(new_position, pieces);
-    // dbg!(new_position, &is_adjacent, &is_castling);
-    is_adjacent || is_castling
-
-    // let is_adjacent = piece.pos.is_adjacent(new_position);
-
-    // if !piece.has_moved {
-    //     return pieces
-    //         .iter()
-    //         .filter(|oth_piece| {
-    //             oth_piece.piece_type == PieceType::Rook
-    //                 && oth_piece.colour == PieceColour::White
-    //                 && !oth_piece.has_moved
-    //         })
-    //         .any(|rook| {
-    //             (rook.pos.rank - new_position.rank).abs() == 1
-    //                 && is_path_empty(&piece.pos, new_position, pieces)
-    //             // TODO check for moving through/out of check
-    //         })
-    //         || is_adjacent;
-    // }
-
-    // is_adjacent
+    piece.pos.is_adjacent(new_position) || piece.may_castle(new_position, pieces)
 }
 
 fn is_valid_for_queen(piece: &Piece, new_position: &Square, pieces: &[Piece]) -> bool {
@@ -441,10 +396,7 @@ fn is_valid_for_pawn(
     pieces: &[Piece],
     last_move: &Option<MoveRecord>,
 ) -> bool {
-    let (movement_direction, start_x) = match piece.colour {
-        PieceColour::White => (1, 1),
-        PieceColour::Black => (-1, 6),
-    };
+    let movement_direction = piece.colour.pawn_movement_direction();
 
     // Standard
     if new_position.rank - piece.pos.rank == movement_direction

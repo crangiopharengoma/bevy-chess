@@ -3,8 +3,9 @@ use bevy::prelude::*;
 pub use components::Square;
 pub use components::Taken;
 pub use events::MoveMadeEvent;
+pub use events::MoveType;
 pub use events::ResetSelectedEvent;
-pub use resources::PlayerTurn;
+pub use resources::{DrawReason, GameStatus, PlayerTurn};
 use resources::{Graveyard, MoveStack, SelectedPiece, SelectedSquare, SquareMaterials};
 
 mod components;
@@ -23,6 +24,7 @@ impl Plugin for BoardPlugin {
             .init_resource::<SquareMaterials>()
             .init_resource::<Graveyard>()
             .init_resource::<MoveStack>()
+            .init_resource::<GameStatus>()
             .add_event::<ResetSelectedEvent>()
             .add_event::<MoveMadeEvent>()
             .add_startup_system(systems::create_board)
@@ -33,6 +35,7 @@ impl Plugin for BoardPlugin {
             .add_system(systems::remove_taken_pieces)
             .add_system(systems::reset_selected)
             .add_system(systems::colour_moves)
-            .add_system(systems::push_move);
+            .add_system(systems::push_move)
+            .add_system(systems::update_status.before(systems::make_move));
     }
 }

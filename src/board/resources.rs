@@ -86,6 +86,30 @@ impl Default for PlayerTurn {
     }
 }
 
+#[derive(Resource, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum GameStatus {
+    #[default]
+    NotStarted,
+    OnGoing,
+    Check,
+    Checkmate,
+    Draw(DrawReason),
+}
+
+/// The various different rules that can lead to a draw. Fivefold Repetition and DeadPosition are not
+/// yet checked. A full implementation of DeadPosition is probably beyond the scope of this project
+/// but the intent is to capture simple material based dead positions, but not capture more complex
+/// board state scenarios where in theory sufficient material exits for a mate but it is impossible
+/// to actually achieve mate.
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum DrawReason {
+    Stalemate,
+    // FivefoldRepetition,
+    FiftyMoveRule,
+    // DeadPosition,
+}
+
 impl PlayerTurn {
     pub fn change(&mut self) {
         self.0 = self.0.opponent()
