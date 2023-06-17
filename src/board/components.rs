@@ -3,7 +3,7 @@ use std::ops::Add;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 
-use crate::pieces::{Piece, PieceColour};
+use crate::pieces::{Piece, PieceColour, PieceType};
 
 #[derive(Component)]
 pub struct Taken {
@@ -13,6 +13,11 @@ pub struct Taken {
 #[derive(Component)]
 pub struct Move {
     pub square: Square,
+}
+
+#[derive(Component)]
+pub struct Promote {
+    pub to: PieceType,
 }
 
 #[derive(Clone, Copy, Component, PartialEq, Eq, Hash)]

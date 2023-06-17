@@ -1,3 +1,4 @@
+use bevy::prelude::GamepadButtonType::Select;
 use bevy::prelude::*;
 use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
 
@@ -8,7 +9,7 @@ use crate::board::events::ResetSelectedEvent;
 use crate::board::resources::{
     DrawReason, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
 };
-use crate::board::{GameStatus, MoveMadeEvent};
+use crate::board::{GameStatus, MoveMadeEvent, Promote, PromotionOutcome, SelectPromotionOutcome};
 use crate::pieces::{Piece, PieceColour, PieceType};
 
 mod movement;
@@ -122,6 +123,30 @@ pub fn reset_selected(
     }
 }
 
+pub fn select_promotion(
+    mut event_writer: EventWriter<SelectPromotionOutcome>,
+    pieces: Query<(Entity, &Piece, &Move), Without<Taken>>,
+) {
+    for (entity, piece, movement) in pieces.iter() {
+        if piece.piece_type == PieceType::Pawn
+            && (movement.square.rank == 0 || movement.square.rank == 7)
+        {
+            let event = SelectPromotionOutcome { entity };
+            event_writer.send(event);
+        }
+    }
+}
+
+pub fn promote_piece(mut commands: Commands, mut event_reader: EventReader<PromotionOutcome>) {
+    for event in event_reader.iter() {
+        let promote = Promote {
+            to: event.piece_type,
+        };
+
+        commands.entity(event.entity).insert(promote);
+    }
+}
+
 pub fn update_status(
     mut game_status: ResMut<GameStatus>,
     mut turn: ResMut<PlayerTurn>,
@@ -149,7 +174,6 @@ pub fn update_status(
         } else {
             *last_action += 1
         }
-        dbg!(&last_action);
 
         let last_move = Some((*moving_piece, event.origin, event.destination));
         let has_moves = player_has_moves(turn.0.opponent(), &pieces_vec, &pieces_vec, last_move);

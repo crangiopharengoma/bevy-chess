@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
-use crate::board::{DrawReason, GameStatus, PlayerTurn};
+use crate::board::{DrawReason, GameStatus, PlayerTurn, PromotionOutcome, SelectPromotionOutcome};
+use crate::pieces::PieceType;
 
 pub struct UiPlugin;
 
@@ -8,6 +9,7 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app // new line
             .add_startup_system(init_next_move_text)
+            .add_system(make_promotion_choice)
             .add_system(next_move_text_update);
     }
 }
@@ -15,6 +17,21 @@ impl Plugin for UiPlugin {
 /// Marker component for the Text entity
 #[derive(Component)]
 struct NextMoveText;
+
+fn make_promotion_choice(
+    mut event_reader: EventReader<SelectPromotionOutcome>,
+    mut event_writer: EventWriter<PromotionOutcome>,
+) {
+    for event in event_reader.iter() {
+        // TODO UI element to prompt the user to select something
+        let promotion = PromotionOutcome {
+            entity: event.entity,
+            piece_type: PieceType::Queen,
+        };
+
+        event_writer.send(promotion);
+    }
+}
 
 /// Updates the current move text based on the `PlayerTurn` resource
 fn next_move_text_update(
