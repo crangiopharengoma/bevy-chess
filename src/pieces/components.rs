@@ -47,8 +47,7 @@ impl Display for PieceColour {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum PieceType {
     King,
     Queen,
@@ -56,6 +55,12 @@ pub enum PieceType {
     Knight,
     Rook,
     Pawn,
+}
+
+impl Display for PieceType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 #[derive(Clone, Copy, Component)]
