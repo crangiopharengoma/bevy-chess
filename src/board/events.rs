@@ -1,6 +1,7 @@
 use bevy::prelude::Entity;
 
 use crate::board::components::Square;
+use crate::pieces::PieceType;
 
 pub struct ResetSelectedEvent;
 
@@ -63,4 +64,13 @@ impl MoveMadeEvent {
             MoveType::Take(_) | MoveType::TakeEnPassant(_)
         )
     }
+}
+
+pub struct SelectPromotionOutcome {
+    pub entity: Entity,
+}
+
+pub struct PromotionOutcome {
+    pub entity: Entity,
+    pub piece_type: PieceType,
 }
