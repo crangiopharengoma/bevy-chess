@@ -1,4 +1,3 @@
-use bevy::prelude::GamepadButtonType::Select;
 use bevy::prelude::*;
 use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, SelectionEvent};
 
