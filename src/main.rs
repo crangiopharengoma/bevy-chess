@@ -18,7 +18,6 @@ fn main() {
         .add_plugin(BoardPlugin)
         .add_plugin(PiecesPlugin)
         .add_plugin(UiPlugin)
-        // .add_plugin(HistoryPlugin)
         .add_startup_system(setup)
         .run();
 }
