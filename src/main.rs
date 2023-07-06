@@ -4,11 +4,9 @@ use bevy_mod_picking::{DefaultPickingPlugins, PickingCameraBundle};
 use pieces::PiecesPlugin;
 
 use crate::board::BoardPlugin;
-use crate::history::HistoryPlugin;
 use crate::ui::UiPlugin;
 
 mod board;
-mod history;
 mod pieces;
 mod ui;
 
@@ -20,7 +18,7 @@ fn main() {
         .add_plugin(BoardPlugin)
         .add_plugin(PiecesPlugin)
         .add_plugin(UiPlugin)
-        .add_plugin(HistoryPlugin)
+        // .add_plugin(HistoryPlugin)
         .add_startup_system(setup)
         .run();
 }
