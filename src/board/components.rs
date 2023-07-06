@@ -1,8 +1,10 @@
+use std::fmt::{Display, Formatter};
 use std::ops::Add;
 
 use bevy::math::Vec3;
 use bevy::prelude::*;
 
+use crate::board;
 use crate::pieces::{Piece, PieceColour, PieceType};
 
 #[derive(Component)]
@@ -25,6 +27,24 @@ pub struct Promote {
 pub struct Square {
     pub rank: i8,
     pub file: i8,
+}
+
+/// Display the square using algebraic notation
+impl Display for Square {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let file_letter = match self.file {
+            board::A_FILE => "a",
+            board::B_FILE => "b",
+            board::C_FILE => "c",
+            board::D_FILE => "d",
+            board::E_FILE => "e",
+            board::F_FILE => "f",
+            board::G_FILE => "g",
+            board::H_FILE => "h",
+            _ => panic!("impossible file"),
+        };
+        write!(f, "{file_letter}{}", self.rank + 1)
+    }
 }
 
 impl Square {
@@ -75,7 +95,10 @@ impl Square {
     ///
     /// True means x and y are both between 0 and 7
     pub fn is_valid(&self) -> bool {
-        self.rank >= 0 && self.rank < 8 && self.file >= 0 && self.file < 8
+        self.rank >= board::RANK_1
+            && self.rank <= board::RANK_8
+            && self.file >= board::A_FILE
+            && self.file <= board::H_FILE
     }
 
     /// Fallible add operation

@@ -14,6 +14,24 @@ mod systems;
 
 pub struct BoardPlugin;
 
+pub const A_FILE: i8 = 0;
+pub const B_FILE: i8 = 1;
+pub const C_FILE: i8 = 2;
+pub const D_FILE: i8 = 3;
+pub const E_FILE: i8 = 4;
+pub const F_FILE: i8 = 5;
+pub const G_FILE: i8 = 6;
+pub const H_FILE: i8 = 7;
+
+pub const RANK_1: i8 = 0;
+pub const RANK_2: i8 = 1;
+pub const RANK_3: i8 = 2;
+pub const RANK_4: i8 = 3;
+pub const RANK_5: i8 = 4;
+pub const RANK_6: i8 = 5;
+pub const RANK_7: i8 = 6;
+pub const RANK_8: i8 = 7;
+
 impl Plugin for BoardPlugin {
     fn build(&self, app: &mut App) {
         app // new line

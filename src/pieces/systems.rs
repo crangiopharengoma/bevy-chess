@@ -67,8 +67,8 @@ fn add_new_mesh(
     match mesh {
         King(mesh_1, mesh_2, transform) | Knight(mesh_1, mesh_2, transform) => {
             let (child_1, child_2) = (
-                spawn_child(&mut commands, mesh_1, material.clone(), transform),
-                spawn_child(&mut commands, mesh_2, material.clone(), transform),
+                spawn_child(commands, mesh_1, material.clone(), transform),
+                spawn_child(commands, mesh_2, material.clone(), transform),
             );
             commands.entity(entity).add_child(child_1);
             commands.entity(entity).add_child(child_2);
@@ -77,7 +77,7 @@ fn add_new_mesh(
         | Rook(mesh, transform)
         | Pawn(mesh, transform)
         | Bishop(mesh, transform) => {
-            let child = spawn_child(&mut commands, mesh, material.clone(), transform);
+            let child = spawn_child(commands, mesh, material.clone(), transform);
             commands.entity(entity).add_child(child);
         }
     }

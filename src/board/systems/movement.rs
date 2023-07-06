@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy::utils::HashSet;
 use bevy_mod_picking::{Hover, Selection};
 
+use crate::board;
 use crate::board::components::Move;
 use crate::board::resources::{
     Graveyard, MoveStack, SelectedPiece, SelectedSquare, SquareMaterials,
@@ -137,7 +138,7 @@ pub fn move_piece(
                 .entity(piece_entity)
                 .insert(Move { square: *square });
 
-            // if castling the rook need to move too
+            // if castling the rook needs to move too
             if moving_piece.piece_type == PieceType::King
                 && (moving_piece.pos.file - square.file).abs() == 2
             {
@@ -177,7 +178,7 @@ fn try_get_taken_piece(
 
         if taken_piece.is_none() {
             let taken_piece =
-                get_en_passant_piece(&pieces, square, piece_entity, last_move_event, &last_move);
+                get_en_passant_piece(&pieces, square, piece_entity, last_move_event, last_move);
             (taken_piece, taken_piece.is_some())
         } else {
             (taken_piece, false)
@@ -192,7 +193,11 @@ fn move_castling_rook(
     square: &Square,
     moving_piece: &Piece,
 ) {
-    let rook_dest_file = if square.file == 6 { 5 } else { 3 };
+    let rook_dest_file = if square.file == board::G_FILE {
+        board::F_FILE
+    } else {
+        board::D_FILE
+    };
     let rook_dest_square = Square {
         rank: square.rank,
         file: rook_dest_file,

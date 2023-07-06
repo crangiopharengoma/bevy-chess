@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use bevy::prelude::*;
 use bevy::utils::HashSet;
@@ -59,7 +59,21 @@ pub enum PieceType {
 
 impl Display for PieceType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+        Debug::fmt(self, f)
+    }
+}
+
+impl PieceType {
+    pub fn notation_letter(&self) -> String {
+        match self {
+            PieceType::King => "K",
+            PieceType::Queen => "Q",
+            PieceType::Bishop => "B",
+            PieceType::Knight => "N",
+            PieceType::Rook => "R",
+            PieceType::Pawn => "",
+        }
+        .to_string()
     }
 }
 

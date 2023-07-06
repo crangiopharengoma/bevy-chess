@@ -3,6 +3,7 @@ use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, Se
 
 pub use movement::{colour_moves, make_move, move_piece, push_move, remove_taken_pieces};
 
+use crate::board;
 use crate::board::components::{Move, Square, Taken};
 use crate::board::events::ResetSelectedEvent;
 use crate::board::resources::{
@@ -23,9 +24,9 @@ pub fn create_board(
         subdivisions: 0,
     }));
 
-    for i in 0..8 {
-        for j in 0..8 {
-            let square = Square { rank: i, file: j };
+    for rank in board::RANK_1..=board::RANK_8 {
+        for file in board::A_FILE..=board::H_FILE {
+            let square = Square { rank, file };
             let initial_material = if square.is_white() {
                 square_materials.white_colour.clone()
             } else {
@@ -35,7 +36,11 @@ pub fn create_board(
                 PbrBundle {
                     mesh: mesh.clone(),
                     material: initial_material.clone(),
-                    transform: Transform::from_translation(Vec3::new(i as f32, 0.0, j as f32)),
+                    transform: Transform::from_translation(Vec3::new(
+                        rank as f32,
+                        0.0,
+                        file as f32,
+                    )),
                     ..Default::default()
                 },
                 PickableBundle::default(),
@@ -45,7 +50,7 @@ pub fn create_board(
                     pressed: None,
                     selected: Some(square_materials.selected_colour.clone()),
                 },
-                Square { rank: i, file: j },
+                Square { rank, file },
             ));
         }
     }
@@ -128,7 +133,7 @@ pub fn select_promotion(
 ) {
     for (entity, piece, movement) in pieces.iter() {
         if piece.piece_type == PieceType::Pawn
-            && (movement.square.rank == 0 || movement.square.rank == 7)
+            && (movement.square.rank == board::RANK_1 || movement.square.rank == board::RANK_8)
         {
             let event = SelectPromotionOutcome { entity };
             event_writer.send(event);
