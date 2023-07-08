@@ -32,7 +32,17 @@ pub struct Square {
 /// Display the square using algebraic notation
 impl Display for Square {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let file_letter = match self.file {
+        write!(f, "{}{}", self.file_annotation(), self.rank_annotation())
+    }
+}
+
+impl Square {
+    pub fn is_white(&self) -> bool {
+        (self.rank + self.file + 1) % 2 == 0
+    }
+
+    pub fn file_annotation(&self) -> String {
+        match self.file {
             board::A_FILE => "a",
             board::B_FILE => "b",
             board::C_FILE => "c",
@@ -42,14 +52,12 @@ impl Display for Square {
             board::G_FILE => "g",
             board::H_FILE => "h",
             _ => panic!("impossible file"),
-        };
-        write!(f, "{file_letter}{}", self.rank + 1)
+        }
+        .to_string()
     }
-}
 
-impl Square {
-    pub fn is_white(&self) -> bool {
-        (self.rank + self.file + 1) % 2 == 0
+    pub fn rank_annotation(&self) -> String {
+        (self.rank + 1).to_string()
     }
 
     /// Returns true if `other` is adjacent to `self`. Adjacency includes diagonals

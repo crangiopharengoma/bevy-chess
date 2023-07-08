@@ -7,9 +7,11 @@ use crate::board;
 use crate::board::components::{Move, Square, Taken};
 use crate::board::events::ResetSelectedEvent;
 use crate::board::resources::{
-    DrawReason, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
+    DrawReason, MoveHistory, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
 };
-use crate::board::{GameStatus, MoveMadeEvent, Promote, PromotionOutcome, SelectPromotionOutcome};
+use crate::board::{
+    GameStatus, MoveMadeEvent, MoveType, Promote, PromotionOutcome, SelectPromotionOutcome,
+};
 use crate::pieces::{Piece, PieceColour, PieceType};
 
 mod movement;
@@ -154,7 +156,9 @@ pub fn promote_piece(mut commands: Commands, mut event_reader: EventReader<Promo
 pub fn update_status(
     mut game_status: ResMut<GameStatus>,
     mut turn: ResMut<PlayerTurn>,
+    mut move_history: ResMut<MoveHistory>,
     mut last_action: Local<i32>,
+    mut move_number: Local<u32>,
     mut event_reader: EventReader<MoveMadeEvent>,
     pieces: Query<(&Piece, Option<&Move>), Without<Taken>>,
 ) {
@@ -197,6 +201,111 @@ pub fn update_status(
             turn.change();
             GameStatus::OnGoing
         };
+
+        let destination = event.destination;
+
+        let pieces: Vec<_> = pieces.iter().map(|(piece, movement)| *piece).collect();
+
+        if moving_piece.colour == PieceColour::White {
+            *move_number += 1;
+            let move_annotation = generate_move_annotation(
+                &format!("{}. ", *move_number),
+                event,
+                last_move,
+                moving_piece,
+                &pieces,
+                &destination,
+                game_status.as_ref(),
+            );
+            move_history.0.push(move_annotation);
+        } else {
+            let current = move_history.0.last_mut().unwrap();
+            *current = generate_move_annotation(
+                current,
+                event,
+                last_move,
+                moving_piece,
+                &pieces,
+                &destination,
+                game_status.as_ref(),
+            );
+        }
+    }
+}
+
+fn generate_move_annotation(
+    prefix: &str,
+    event: &MoveMadeEvent,
+    last_move: Option<(Piece, Square, Square)>,
+    moving_piece: &Piece,
+    pieces: &[Piece],
+    destination: &Square,
+    status: &GameStatus,
+) -> String {
+    let ambiguous_pieces: Vec<_> = pieces
+        .iter()
+        .filter(|piece| {
+            piece.colour == moving_piece.colour
+                && piece.piece_type == moving_piece.piece_type
+                && piece.legal_moves(pieces, last_move).contains(destination)
+                && piece.pos != moving_piece.pos
+        })
+        .collect();
+
+    let file_ambiguous = ambiguous_pieces
+        .iter()
+        .any(|piece| piece.pos.file == moving_piece.pos.file);
+    let rank_ambiguous = ambiguous_pieces
+        .iter()
+        .any(|piece| piece.pos.rank == moving_piece.pos.rank);
+
+    let disambiguator = if file_ambiguous && rank_ambiguous {
+        moving_piece.pos.to_string()
+    } else if file_ambiguous {
+        moving_piece.pos.rank_annotation()
+    } else if rank_ambiguous {
+        moving_piece.pos.file_annotation()
+    } else {
+        String::new()
+    };
+
+    let status = match status {
+        GameStatus::Check => "!",
+        GameStatus::Checkmate => "#",
+        _ => "",
+    };
+
+    match event.move_type {
+        MoveType::Take(_) | MoveType::TakeEnPassant(_) => {
+            let piece_letter = if moving_piece.piece_type == PieceType::Pawn {
+                moving_piece
+                    .pos
+                    .to_string()
+                    .chars()
+                    .next()
+                    .unwrap()
+                    .to_string()
+            } else {
+                moving_piece.piece_type.notation_letter()
+            };
+            format!(
+                "{prefix} {piece_letter}{disambiguator}x{destination}{status}",
+                // piece.piece_type.notation_letter()
+            )
+        }
+        MoveType::Castle => {
+            if destination.file == board::G_FILE {
+                format!("{prefix} 0-0{status}")
+            } else {
+                format!("{prefix} 0-0-0{status}")
+            }
+        }
+        MoveType::Move => {
+            format!(
+                "{prefix} {}{disambiguator}{destination}{status}",
+                moving_piece.piece_type.notation_letter()
+            )
+        }
     }
 }
 

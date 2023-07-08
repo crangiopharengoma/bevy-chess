@@ -4,7 +4,7 @@ pub use components::{Promote, Square, Taken};
 pub use events::{
     MoveMadeEvent, MoveType, PromotionOutcome, ResetSelectedEvent, SelectPromotionOutcome,
 };
-pub use resources::{DrawReason, GameStatus, PlayerTurn};
+pub use resources::{DrawReason, GameStatus, MoveHistory, PlayerTurn};
 use resources::{Graveyard, MoveStack, SelectedPiece, SelectedSquare, SquareMaterials};
 
 mod components;
@@ -41,6 +41,7 @@ impl Plugin for BoardPlugin {
             .init_resource::<SquareMaterials>()
             .init_resource::<Graveyard>()
             .init_resource::<MoveStack>()
+            .init_resource::<MoveHistory>()
             .init_resource::<GameStatus>()
             .add_event::<ResetSelectedEvent>()
             .add_event::<MoveMadeEvent>()

@@ -3,12 +3,10 @@ use bevy::a11y::AccessibilityNode;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 
-use crate::board;
 use crate::board::{
-    DrawReason, GameStatus, MoveMadeEvent, MoveType, PlayerTurn, PromotionOutcome,
-    SelectPromotionOutcome, Square,
+    DrawReason, GameStatus, MoveHistory, PlayerTurn, PromotionOutcome, SelectPromotionOutcome,
 };
-use crate::pieces::{Piece, PieceColour, PieceType};
+use crate::pieces::PieceType;
 
 pub struct UiPlugin;
 
@@ -49,88 +47,36 @@ struct ScrollingList {
 }
 
 #[derive(Component, Default)]
-struct MoveNumber(u32);
+struct MoveNumber(usize);
 
 fn update_move_log(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut move_event: EventReader<MoveMadeEvent>,
-    pieces: Query<&Piece>,
+    move_history: Res<MoveHistory>,
     scroll_list: Query<(Entity, &ScrollingList)>,
     mut scroll_list_entries: Query<(&MoveNumber, &mut Text)>,
-    mut move_number: Local<u32>,
+    mut max: Local<usize>,
 ) {
-    for event in move_event.iter() {
-        let piece = pieces
-            .get(event.piece)
-            .expect("unable to find moving piece");
-
-        let destination = event.destination;
-
-        if piece.colour == PieceColour::White {
-            *move_number += 1;
-            let move_annotation = generate_move_annotation(
-                &format!("{}. ", *move_number),
-                event,
-                piece,
-                &destination,
-            );
-
-            let (sl_entity, _) = scroll_list.iter().next().unwrap();
-            commands.entity(sl_entity).with_children(|parent| {
-                create_scroll_list_item(&asset_server, parent, move_annotation, *move_number);
-            });
-        } else {
-            for (move_number_record, mut text) in scroll_list_entries.iter_mut() {
-                if move_number_record.0 == *move_number {
-                    let current = &text.sections[0].value;
-                    let move_annotation =
-                        generate_move_annotation(current, event, piece, &destination);
-                    text.sections[0].value = move_annotation;
-                }
-            }
-        }
+    if !move_history.is_changed() {
+        return;
     }
-}
 
-fn generate_move_annotation(
-    prefix: &str,
-    event: &MoveMadeEvent,
-    piece: &Piece,
-    destination: &Square,
-) -> String {
-    // TODO check for ambiguous cases
-    // TODO Handle check and checkmate
+    scroll_list_entries.iter_mut().for_each(|(num, mut text)| {
+        let updated_text = move_history.0.get(num.0).unwrap();
+        text.sections[0].value = updated_text.clone();
+    });
 
-    match event.move_type {
-        MoveType::Take(_) | MoveType::TakeEnPassant(_) => {
-            let piece_letter = if piece.piece_type == PieceType::Pawn {
-                piece.pos.to_string().chars().next().unwrap().to_string()
-            } else {
-                piece.piece_type.notation_letter()
-            };
-            format!(
-                "{prefix} {piece_letter}x{destination}",
-                // piece.piece_type.notation_letter()
-            )
-        }
-        MoveType::Castle => {
-            if destination.file == board::G_FILE {
-                format!("{prefix} 0-0")
-            } else {
-                format!("{prefix} 0-0-0")
-            }
-        }
-        MoveType::Move => {
-            format!(
-                "{prefix} {}{destination}",
-                piece.piece_type.notation_letter()
-            )
-        }
+    if move_history.0.len() > *max {
+        let (sl_entity, _) = scroll_list.iter().next().unwrap();
+        commands.entity(sl_entity).with_children(|parent| {
+            create_scroll_list_item(&asset_server, parent, move_history.0.last().unwrap(), *max);
+        });
+        *max += 1;
     }
 }
 
 fn display_move_log(mut commands: Commands, asset_server: Res<AssetServer>) {
+    // dbg!(&move_history.0);
     // root node
     commands
         .spawn(NodeBundle {
@@ -203,12 +149,9 @@ fn display_move_log(mut commands: Commands, asset_server: Res<AssetServer>) {
                             ));
                             // .with_children(|parent| {
                             //     // List items
-                            //     for i in 0..30 {
-                            //         create_scroll_list_item(
-                            //             &asset_server,
-                            //             parent,
-                            //             format!("Item {i}"),
-                            //         );
+                            //     for move_text in move_history.0.iter() {
+                            //         println!("creating {move_text}");
+                            //         create_scroll_list_item(&asset_server, parent, move_text);
                             //     }
                             // });
                         });
@@ -219,8 +162,8 @@ fn display_move_log(mut commands: Commands, asset_server: Res<AssetServer>) {
 fn create_scroll_list_item(
     asset_server: &Res<AssetServer>,
     parent: &mut ChildBuilder,
-    move_text: String,
-    move_number: u32,
+    move_text: &String,
+    move_number: usize,
 ) {
     parent.spawn((
         TextBundle::from_section(
@@ -261,6 +204,7 @@ fn mouse_scroll(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn make_promotion_choice(
     mut commands: Commands,
     mut event_writer: EventWriter<PromotionOutcome>,

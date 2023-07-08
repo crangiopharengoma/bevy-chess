@@ -77,8 +77,7 @@ impl PieceType {
     }
 }
 
-#[derive(Clone, Copy, Component)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Component, Debug)]
 pub struct Piece {
     pub colour: PieceColour,
     pub piece_type: PieceType,

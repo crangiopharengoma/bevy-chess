@@ -52,7 +52,7 @@ pub fn change_mesh(
 }
 
 fn add_new_mesh(
-    mut commands: &mut Commands,
+    commands: &mut Commands,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     entity: Entity,
     piece: &mut Mut<Piece>,
