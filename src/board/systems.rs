@@ -3,12 +3,15 @@ use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, Se
 
 pub use movement::{colour_moves, make_move, move_piece, push_move, remove_taken_pieces};
 
+use crate::board;
 use crate::board::components::{Move, Square, Taken};
 use crate::board::events::ResetSelectedEvent;
 use crate::board::resources::{
-    DrawReason, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
+    DrawReason, MoveHistory, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
 };
-use crate::board::{GameStatus, MoveMadeEvent, Promote, PromotionOutcome, SelectPromotionOutcome};
+use crate::board::{
+    GameStatus, MoveMadeEvent, MoveType, Promote, PromotionOutcome, SelectPromotionOutcome,
+};
 use crate::pieces::{Piece, PieceColour, PieceType};
 
 mod movement;
@@ -23,9 +26,9 @@ pub fn create_board(
         subdivisions: 0,
     }));
 
-    for i in 0..8 {
-        for j in 0..8 {
-            let square = Square { rank: i, file: j };
+    for rank in board::RANK_1..=board::RANK_8 {
+        for file in board::A_FILE..=board::H_FILE {
+            let square = Square { rank, file };
             let initial_material = if square.is_white() {
                 square_materials.white_colour.clone()
             } else {
@@ -35,7 +38,11 @@ pub fn create_board(
                 PbrBundle {
                     mesh: mesh.clone(),
                     material: initial_material.clone(),
-                    transform: Transform::from_translation(Vec3::new(i as f32, 0.0, j as f32)),
+                    transform: Transform::from_translation(Vec3::new(
+                        rank as f32,
+                        0.0,
+                        file as f32,
+                    )),
                     ..Default::default()
                 },
                 PickableBundle::default(),
@@ -45,7 +52,7 @@ pub fn create_board(
                     pressed: None,
                     selected: Some(square_materials.selected_colour.clone()),
                 },
-                Square { rank: i, file: j },
+                Square { rank, file },
             ));
         }
     }
@@ -128,28 +135,38 @@ pub fn select_promotion(
 ) {
     for (entity, piece, movement) in pieces.iter() {
         if piece.piece_type == PieceType::Pawn
-            && (movement.square.rank == 0 || movement.square.rank == 7)
+            && (movement.square.rank == board::RANK_1 || movement.square.rank == board::RANK_8)
         {
-            let event = SelectPromotionOutcome { entity };
-            event_writer.send(event);
+            event_writer.send(SelectPromotionOutcome { entity });
         }
     }
 }
 
-pub fn promote_piece(mut commands: Commands, mut event_reader: EventReader<PromotionOutcome>) {
+pub fn promote_piece(
+    mut commands: Commands,
+    mut move_history: ResMut<MoveHistory>,
+    mut event_reader: EventReader<PromotionOutcome>,
+) {
     for event in event_reader.iter() {
         let promote = Promote {
             to: event.piece_type,
         };
 
         commands.entity(event.entity).insert(promote);
+        move_history
+            .0
+            .last_mut()
+            .unwrap()
+            .push_str(&format!("={}", event.piece_type.notation_letter()));
     }
 }
 
 pub fn update_status(
     mut game_status: ResMut<GameStatus>,
     mut turn: ResMut<PlayerTurn>,
+    mut move_history: ResMut<MoveHistory>,
     mut last_action: Local<i32>,
+    mut move_number: Local<u32>,
     mut event_reader: EventReader<MoveMadeEvent>,
     pieces: Query<(&Piece, Option<&Move>), Without<Taken>>,
 ) {
@@ -192,6 +209,113 @@ pub fn update_status(
             turn.change();
             GameStatus::OnGoing
         };
+
+        let destination = event.destination;
+
+        let pieces: Vec<_> = pieces.iter().map(|(piece, _)| *piece).collect();
+
+        if moving_piece.colour == PieceColour::White {
+            *move_number += 1;
+            let move_annotation = generate_move_annotation(
+                &format!("{}. ", *move_number),
+                event,
+                last_move,
+                moving_piece,
+                &pieces,
+                &destination,
+                game_status.as_ref(),
+            );
+            move_history.0.push(move_annotation);
+        } else {
+            let current = move_history.0.last_mut().unwrap();
+            *current = generate_move_annotation(
+                current,
+                event,
+                last_move,
+                moving_piece,
+                &pieces,
+                &destination,
+                game_status.as_ref(),
+            );
+        }
+    }
+}
+
+fn generate_move_annotation(
+    prefix: &str,
+    event: &MoveMadeEvent,
+    last_move: Option<(Piece, Square, Square)>,
+    moving_piece: &Piece,
+    pieces: &[Piece],
+    destination: &Square,
+    status: &GameStatus,
+) -> String {
+    let ambiguous_pieces: Vec<_> = pieces
+        .iter()
+        .filter(|piece| {
+            piece.colour == moving_piece.colour
+                && piece.piece_type == moving_piece.piece_type
+                && piece.legal_moves(pieces, last_move).contains(destination)
+                && piece.pos != moving_piece.pos
+        })
+        .collect();
+
+    let file_ambiguous = ambiguous_pieces
+        .iter()
+        .any(|piece| piece.pos.file == moving_piece.pos.file);
+    let rank_ambiguous = ambiguous_pieces
+        .iter()
+        .any(|piece| piece.pos.rank == moving_piece.pos.rank);
+
+    let disambiguator = if file_ambiguous {
+        if rank_ambiguous {
+            moving_piece.pos.to_string()
+        } else {
+            moving_piece.pos.rank_annotation()
+        }
+    } else if !ambiguous_pieces.is_empty() {
+        moving_piece.pos.file_annotation()
+    } else {
+        String::new()
+    };
+
+    let status = match status {
+        GameStatus::Check => "!",
+        GameStatus::Checkmate => "#",
+        _ => "",
+    };
+
+    match event.move_type {
+        MoveType::Take(_) | MoveType::TakeEnPassant(_) => {
+            let piece_letter = if moving_piece.piece_type == PieceType::Pawn {
+                moving_piece
+                    .pos
+                    .to_string()
+                    .chars()
+                    .next()
+                    .unwrap()
+                    .to_string()
+            } else {
+                moving_piece.piece_type.notation_letter()
+            };
+            format!(
+                "{prefix} {piece_letter}{disambiguator}x{destination}{status}",
+                // piece.piece_type.notation_letter()
+            )
+        }
+        MoveType::Castle => {
+            if destination.file == board::G_FILE {
+                format!("{prefix} 0-0{status}")
+            } else {
+                format!("{prefix} 0-0-0{status}")
+            }
+        }
+        MoveType::Move => {
+            format!(
+                "{prefix} {}{disambiguator}{destination}{status}",
+                moving_piece.piece_type.notation_letter()
+            )
+        }
     }
 }
 

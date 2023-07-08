@@ -1,17 +1,28 @@
+use bevy::a11y::accesskit::{NodeBuilder, Role};
+use bevy::a11y::AccessibilityNode;
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 
-use crate::board::{DrawReason, GameStatus, PlayerTurn, PromotionOutcome, SelectPromotionOutcome};
+use crate::board::{
+    DrawReason, GameStatus, MoveHistory, PlayerTurn, PromotionOutcome, SelectPromotionOutcome,
+};
 use crate::pieces::PieceType;
 
 pub struct UiPlugin;
+
+const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
+const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app // new line
             .add_startup_system(init_next_move_text)
+            .add_startup_system(display_move_log)
+            .add_system(mouse_scroll)
             .add_system(make_promotion_choice)
             .add_system(display_promotion_menu)
-            .add_system(next_move_text_update);
+            .add_system(next_move_text_update)
+            .add_system(update_move_log);
     }
 }
 
@@ -26,18 +37,172 @@ struct PromotionMenu {
 }
 
 #[derive(Component)]
-struct ButtonValue {
+struct PromoteButton {
     piece_type: PieceType,
 }
 
-const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
-const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
+#[derive(Component, Default)]
+struct ScrollingList {
+    position: f32,
+}
 
+#[derive(Component, Default)]
+struct MoveNumber(usize);
+
+fn update_move_log(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    move_history: Res<MoveHistory>,
+    scroll_list: Query<(Entity, &ScrollingList)>,
+    mut scroll_list_entries: Query<(&MoveNumber, &mut Text)>,
+    mut max: Local<usize>,
+) {
+    if !move_history.is_changed() {
+        return;
+    }
+
+    scroll_list_entries.iter_mut().for_each(|(num, mut text)| {
+        let updated_text = move_history.0.get(num.0).unwrap();
+        text.sections[0].value = updated_text.clone();
+    });
+
+    if move_history.0.len() > *max {
+        let (sl_entity, _) = scroll_list.iter().next().unwrap();
+        commands.entity(sl_entity).with_children(|parent| {
+            create_scroll_list_item(&asset_server, parent, move_history.0.last().unwrap(), *max);
+        });
+        *max += 1;
+    }
+}
+
+fn display_move_log(mut commands: Commands, asset_server: Res<AssetServer>) {
+    // dbg!(&move_history.0);
+    // root node
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::width(Val::Percent(100.0)),
+                justify_content: JustifyContent::SpaceBetween,
+                position: UiRect::right(Val::Percent(-75.0)),
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            // right vertical fill
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Column,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        size: Size::width(Val::Percent(25.0)),
+                        ..default()
+                    },
+                    background_color: Color::rgb(0.15, 0.15, 0.15).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // Title
+                    parent.spawn((
+                        TextBundle::from_section(
+                            "Move History",
+                            TextStyle {
+                                font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                                font_size: 25.,
+                                color: Color::WHITE,
+                            },
+                        )
+                        .with_style(Style {
+                            size: Size::height(Val::Px(25.)),
+                            ..default()
+                        }),
+                        Label,
+                    ));
+                    // List with hidden overflow
+                    parent
+                        .spawn(NodeBundle {
+                            style: Style {
+                                flex_direction: FlexDirection::Column,
+                                align_self: AlignSelf::Stretch,
+                                size: Size::height(Val::Percent(50.0)),
+                                overflow: Overflow::Hidden,
+                                ..default()
+                            },
+                            background_color: Color::rgb(0.10, 0.10, 0.10).into(),
+                            ..default()
+                        })
+                        .with_children(|parent| {
+                            // Moving panel
+                            parent.spawn((
+                                NodeBundle {
+                                    style: Style {
+                                        flex_direction: FlexDirection::Column,
+                                        max_size: Size::UNDEFINED,
+                                        align_items: AlignItems::Center,
+                                        ..default()
+                                    },
+                                    ..default()
+                                },
+                                ScrollingList::default(),
+                                AccessibilityNode(NodeBuilder::new(Role::List)),
+                            ));
+                        });
+                });
+        });
+}
+
+fn create_scroll_list_item(
+    asset_server: &Res<AssetServer>,
+    parent: &mut ChildBuilder,
+    move_text: &String,
+    move_number: usize,
+) {
+    parent.spawn((
+        TextBundle::from_section(
+            move_text,
+            TextStyle {
+                font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                font_size: 20.,
+                color: Color::WHITE,
+            },
+        ),
+        Label,
+        AccessibilityNode(NodeBuilder::new(Role::ListItem)),
+        MoveNumber(move_number),
+    ));
+}
+
+fn mouse_scroll(
+    mut mouse_wheel_events: EventReader<MouseWheel>,
+    mut query_list: Query<(&mut ScrollingList, &mut Style, &Parent, &Node)>,
+    query_node: Query<&Node>,
+) {
+    for mouse_wheel_event in mouse_wheel_events.iter() {
+        for (mut scrolling_list, mut style, parent, list_node) in &mut query_list {
+            let items_height = list_node.size().y;
+            let container_height = query_node.get(parent.get()).unwrap().size().y;
+
+            let max_scroll = (items_height - container_height).max(0.);
+
+            let dy = match mouse_wheel_event.unit {
+                MouseScrollUnit::Line => mouse_wheel_event.y * 20.,
+                MouseScrollUnit::Pixel => mouse_wheel_event.y,
+            };
+
+            scrolling_list.position += dy;
+            scrolling_list.position = scrolling_list.position.clamp(-max_scroll, 0.);
+            style.position.top = Val::Px(scrolling_list.position);
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
 fn make_promotion_choice(
     mut commands: Commands,
     mut event_writer: EventWriter<PromotionOutcome>,
     mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor, &ButtonValue),
+        (&Interaction, &mut BackgroundColor, &PromoteButton),
         (Changed<Interaction>, With<Button>),
     >,
     menu_query: Query<(Entity, &PromotionMenu)>,
@@ -71,15 +236,18 @@ fn display_promotion_menu(
     mut event_reader: EventReader<SelectPromotionOutcome>,
 ) {
     for event in event_reader.iter() {
+        println!("ui received promotion event");
         let promoting_entity = event.entity;
         commands
             .spawn((
                 NodeBundle {
                     style: Style {
                         size: Size::width(Val::Percent(100.0)),
+                        align_self: AlignSelf::Center,
                         align_items: AlignItems::Center,
                         justify_content: JustifyContent::Center,
                         flex_direction: FlexDirection::Column,
+                        position_type: PositionType::Absolute,
                         ..default()
                     },
                     ..default()
@@ -110,7 +278,7 @@ fn spawn_button(asset_server: &Res<AssetServer>, parent: &mut ChildBuilder, piec
                 background_color: NORMAL_BUTTON.into(),
                 ..default()
             },
-            ButtonValue { piece_type },
+            PromoteButton { piece_type },
         ))
         .with_children(|parent| {
             parent.spawn(TextBundle::from_section(
