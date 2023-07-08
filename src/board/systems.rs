@@ -142,13 +142,22 @@ pub fn select_promotion(
     }
 }
 
-pub fn promote_piece(mut commands: Commands, mut event_reader: EventReader<PromotionOutcome>) {
+pub fn promote_piece(
+    mut commands: Commands,
+    mut move_history: ResMut<MoveHistory>,
+    mut event_reader: EventReader<PromotionOutcome>,
+) {
     for event in event_reader.iter() {
         let promote = Promote {
             to: event.piece_type,
         };
 
         commands.entity(event.entity).insert(promote);
+        move_history
+            .0
+            .last_mut()
+            .unwrap()
+            .push_str(&format!("={}", event.piece_type.notation_letter()));
     }
 }
 
@@ -203,7 +212,7 @@ pub fn update_status(
 
         let destination = event.destination;
 
-        let pieces: Vec<_> = pieces.iter().map(|(piece, movement)| *piece).collect();
+        let pieces: Vec<_> = pieces.iter().map(|(piece, _)| *piece).collect();
 
         if moving_piece.colour == PieceColour::White {
             *move_number += 1;
