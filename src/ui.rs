@@ -147,13 +147,6 @@ fn display_move_log(mut commands: Commands, asset_server: Res<AssetServer>) {
                                 ScrollingList::default(),
                                 AccessibilityNode(NodeBuilder::new(Role::List)),
                             ));
-                            // .with_children(|parent| {
-                            //     // List items
-                            //     for move_text in move_history.0.iter() {
-                            //         println!("creating {move_text}");
-                            //         create_scroll_list_item(&asset_server, parent, move_text);
-                            //     }
-                            // });
                         });
                 });
         });
