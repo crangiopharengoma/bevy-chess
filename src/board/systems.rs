@@ -137,8 +137,7 @@ pub fn select_promotion(
         if piece.piece_type == PieceType::Pawn
             && (movement.square.rank == board::RANK_1 || movement.square.rank == board::RANK_8)
         {
-            let event = SelectPromotionOutcome { entity };
-            event_writer.send(event);
+            event_writer.send(SelectPromotionOutcome { entity });
         }
     }
 }
@@ -259,11 +258,13 @@ fn generate_move_annotation(
         .iter()
         .any(|piece| piece.pos.rank == moving_piece.pos.rank);
 
-    let disambiguator = if file_ambiguous && rank_ambiguous {
-        moving_piece.pos.to_string()
-    } else if file_ambiguous {
-        moving_piece.pos.rank_annotation()
-    } else if rank_ambiguous {
+    let disambiguator = if file_ambiguous {
+        if rank_ambiguous {
+            moving_piece.pos.to_string()
+        } else {
+            moving_piece.pos.rank_annotation()
+        }
+    } else if !ambiguous_pieces.is_empty() {
         moving_piece.pos.file_annotation()
     } else {
         String::new()

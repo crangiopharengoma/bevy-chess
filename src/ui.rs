@@ -243,15 +243,18 @@ fn display_promotion_menu(
     mut event_reader: EventReader<SelectPromotionOutcome>,
 ) {
     for event in event_reader.iter() {
+        println!("ui received promotion event");
         let promoting_entity = event.entity;
         commands
             .spawn((
                 NodeBundle {
                     style: Style {
                         size: Size::width(Val::Percent(100.0)),
+                        align_self: AlignSelf::Center,
                         align_items: AlignItems::Center,
                         justify_content: JustifyContent::Center,
                         flex_direction: FlexDirection::Column,
+                        position_type: PositionType::Absolute,
                         ..default()
                     },
                     ..default()
