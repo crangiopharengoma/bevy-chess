@@ -119,12 +119,12 @@ impl PlayerTurn {
     }
 }
 
-#[derive(Default, Resource)]
-pub struct SelectedSquare {
-    pub entity: Option<Entity>,
-}
-
-#[derive(Default, Resource)]
-pub struct SelectedPiece {
-    pub entity: Option<Entity>,
-}
+// #[derive(Default, Resource)]
+// pub struct SelectedSquare {
+//     pub entity: Option<Entity>,
+// }
+//
+// #[derive(Default, Resource)]
+// pub struct SelectedPiece {
+//     pub entity: Option<Entity>,
+// }

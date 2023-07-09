@@ -5,7 +5,7 @@ pub use events::{
     MoveMadeEvent, MoveType, PromotionOutcome, ResetSelectedEvent, SelectPromotionOutcome,
 };
 pub use resources::{DrawReason, GameStatus, MoveHistory, PlayerTurn};
-use resources::{Graveyard, MoveStack, SelectedPiece, SelectedSquare, SquareMaterials};
+use resources::{Graveyard, MoveStack, SquareMaterials};
 
 mod components;
 mod events;
@@ -35,8 +35,8 @@ pub const RANK_8: i8 = 7;
 impl Plugin for BoardPlugin {
     fn build(&self, app: &mut App) {
         app // new line
-            .init_resource::<SelectedSquare>()
-            .init_resource::<SelectedPiece>()
+            // .init_resource::<SelectedSquare>()
+            // .init_resource::<SelectedPiece>()
             .init_resource::<PlayerTurn>()
             .init_resource::<SquareMaterials>()
             .init_resource::<Graveyard>()

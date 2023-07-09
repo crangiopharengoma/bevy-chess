@@ -4,11 +4,9 @@ use bevy_mod_picking::{Highlighting, PickableBundle, PickingEvent, Selection, Se
 pub use movement::{colour_moves, make_move, move_piece, push_move, remove_taken_pieces};
 
 use crate::board;
-use crate::board::components::{Move, Square, Taken};
+use crate::board::components::{Move, Selected, Square, Taken};
 use crate::board::events::ResetSelectedEvent;
-use crate::board::resources::{
-    DrawReason, MoveHistory, PlayerTurn, SelectedPiece, SelectedSquare, SquareMaterials,
-};
+use crate::board::resources::{DrawReason, MoveHistory, MoveStack, PlayerTurn, SquareMaterials};
 use crate::board::{
     GameStatus, MoveMadeEvent, MoveType, Promote, PromotionOutcome, SelectPromotionOutcome,
 };
@@ -58,74 +56,115 @@ pub fn create_board(
     }
 }
 
+/// Consumes events from Bevy_Mod_Picking and adds the `Selected` marker component when an element
+/// is selected, and removes it when it is deselected
 pub fn select_square(
+    mut commands: Commands,
     mut events: EventReader<PickingEvent>,
-    mut selected_square: ResMut<SelectedSquare>,
+    // pieces: Query<(Entity, &Piece), Without<Taken>>,
+    // square: Query<&Square>,
+    // mut selected_square: ResMut<SelectedSquare>,
 ) {
     for event in events.iter() {
         if let PickingEvent::Selection(event) = event {
             match event {
                 SelectionEvent::JustSelected(entity) => {
                     // println!("New square selected {entity:?}");
-                    selected_square.entity = Some(*entity);
+                    // selected_square.entity = Some(*entity);
+                    // let selected = square.get(*entity);
+                    // println!("{selected:?} was selected");
+                    commands.entity(*entity).insert(Selected);
                 }
                 SelectionEvent::JustDeselected(entity) => {
                     // JustDeselected fires when the user is unselecting the current square or when
                     // they select a new square (the previously selected square is unselected. So we
                     // should only clear the SelectedSquare resource when it is the same as the
                     // deselected entity
-                    if selected_square.entity == Some(*entity) {
-                        selected_square.entity = None;
-                    }
+                    // let deselected = square.get(*entity);
+                    // println!("{deselected:?} was selected");
+                    commands.entity(*entity).remove::<Selected>();
+                    // in case a piece has been selected
+                    // for (entity, _) in pieces.iter() {
+                    //     commands.entity(entity).remove::<Selected>();
+                    // }
+                    // if selected_square.entity == Some(*entity) {
+                    //     selected_square.entity = None;
+                    // }
                 }
             }
         }
     }
 }
 
+/// If a selected square contains a piece then give that piece the `Selected` marker trait also
 pub fn select_piece(
-    selected_square: Res<SelectedSquare>,
-    mut selected_piece: ResMut<SelectedPiece>,
+    mut commands: Commands,
+    // selected_square: Res<SelectedSquare>,
+    // mut selected_piece: ResMut<SelectedPiece>,
     turn: Res<PlayerTurn>,
-    squares: Query<&Square>,
-    pieces: Query<(Entity, &Piece), Without<Taken>>,
+    squares: Query<(&Square, &Selected)>,
+    pieces: Query<(Entity, &Piece, Option<&Selected>), Without<Taken>>,
 ) {
-    if !selected_square.is_changed() {
-        return;
+    for (square, _) in squares.iter() {
+        for (entity, piece, selected) in pieces.iter() {
+            if piece.pos.eq(square) && piece.colour == turn.0 && selected.is_none() {
+                println!("{piece:?} was selected");
+                commands.entity(entity).insert(Selected);
+            } else if selected.is_some() && piece.colour == turn.0 && piece.pos.ne(square) {
+                println!("{piece:?} was deselected");
+                commands.entity(entity).remove::<Selected>();
+            }
+        }
     }
 
-    let square = if let Some(Ok(square)) = selected_square
-        .entity
-        .map(|square_entity| squares.get(square_entity))
-    {
-        square
-    } else {
-        return;
-    };
-
-    if selected_piece.entity.is_none() {
-        selected_piece.entity = pieces
-            .iter()
-            .find(|(_, piece)| piece.pos == *square && piece.colour == turn.0)
-            .map(|(entity, _)| entity);
-    }
+    // if !selected_square.is_changed() {
+    //     return;
+    // }
+    //
+    // let square = if let Some(Ok(square)) = selected_square
+    //     .entity
+    //     .map(|square_entity| squares.get(square_entity))
+    // {
+    //     square
+    // } else {
+    //     return;
+    // };
+    //
+    // if selected_piece.entity.is_none() {
+    //     selected_piece.entity = pieces
+    //         .iter()
+    //         .find(|(_, piece)| piece.pos == *square && piece.colour == turn.0)
+    //         .map(|(entity, _)| entity);
+    // }
 }
 
 pub fn reset_selected(
+    mut commands: Commands,
     mut event_reader: EventReader<ResetSelectedEvent>,
-    mut selected_square: ResMut<SelectedSquare>,
-    mut selected_piece: ResMut<SelectedPiece>,
-    mut query: Query<&mut Selection>,
+    // mut selected_square: ResMut<SelectedSquare>,
+    // mut selected_piece: ResMut<SelectedPiece>,
+    mut selected_squares: Query<(Entity, &Square, &Selected, &mut Selection)>,
+    selected_pieces: Query<(Entity, &Piece, &Selected)>,
+    // mut query: Query<&mut Selection>,
 ) {
     for _ in event_reader.iter() {
-        if let Some(square) = selected_square.entity {
-            if let Ok(mut selection) = query.get_mut(square) {
-                selection.set_selected(false)
-            }
+        // if let Some(square) = selected_square.entity {
+        //     if let Ok(mut selection) = query.get_mut(square) {
+        //         selection.set_selected(false)
+        //     }
+        // }
+
+        for (entity, _, _, mut selection) in selected_squares.iter_mut() {
+            selection.set_selected(false);
+            commands.entity(entity).remove::<Selected>();
         }
 
-        selected_square.entity = None;
-        selected_piece.entity = None;
+        for (entity, _, _) in selected_pieces.iter() {
+            commands.entity(entity).remove::<Selected>();
+        }
+
+        // selected_square.entity = None;
+        // selected_piece.entity = None;
     }
 }
 
@@ -162,82 +201,88 @@ pub fn promote_piece(
 }
 
 pub fn update_status(
-    mut game_status: ResMut<GameStatus>,
-    mut turn: ResMut<PlayerTurn>,
-    mut move_history: ResMut<MoveHistory>,
     mut last_action: Local<i32>,
     mut move_number: Local<u32>,
-    mut event_reader: EventReader<MoveMadeEvent>,
-    pieces: Query<(&Piece, Option<&Move>), Without<Taken>>,
+    move_stack: Res<MoveStack>,
+    mut move_history: ResMut<MoveHistory>,
+    mut turn: ResMut<PlayerTurn>,
+    mut game_status: ResMut<GameStatus>,
+    pieces: Query<&Piece>,
 ) {
-    for event in event_reader.iter() {
-        let pieces_vec: Vec<_> = pieces
-            .iter()
-            .map(|(piece, move_opt)| match move_opt {
-                None => *piece,
-                Some(movement) => {
-                    let mut piece = *piece;
-                    piece.pos = movement.square;
-                    piece.has_moved = true;
-                    piece
-                }
-            })
-            .collect();
-        let moving_piece = pieces.get(event.piece).map(|(piece, _)| piece).unwrap();
+    if move_stack.stack.is_empty() || !move_stack.is_changed() {
+        return;
+    }
 
-        if moving_piece.piece_type == PieceType::Pawn || event.is_take() {
-            *last_action = 0
-        } else {
-            *last_action += 1
-        }
+    let pieces_vec: Vec<_> = pieces.iter().copied().collect();
+    let (last_move_event, _) = move_stack.stack.last().unwrap();
+    let moving_piece = pieces.get(last_move_event.piece).unwrap();
+    let last_move_record = Some((
+        *moving_piece,
+        last_move_event.origin,
+        last_move_event.destination,
+    ));
 
-        let last_move = Some((*moving_piece, event.origin, event.destination));
-        let has_moves = player_has_moves(turn.0.opponent(), &pieces_vec, &pieces_vec, last_move);
-        let check = is_in_check(turn.0.opponent(), &pieces_vec, &pieces_vec, last_move);
+    if moving_piece.piece_type == PieceType::Pawn || last_move_event.is_take() {
+        *last_action = 0
+    } else {
+        *last_action += 1
+    }
 
-        *game_status = if check && !has_moves {
-            GameStatus::Checkmate
-        } else if *last_action == 50 {
-            GameStatus::Draw(DrawReason::FiftyMoveRule)
-        } else if check & has_moves {
-            turn.change();
-            GameStatus::Check
-        } else if !check && !has_moves {
-            GameStatus::Draw(DrawReason::Stalemate)
-        } else {
-            // TODO other draw conditions
-            turn.change();
-            GameStatus::OnGoing
-        };
+    let has_moves = player_has_moves(
+        turn.0.opponent(),
+        &pieces_vec,
+        &pieces_vec,
+        last_move_record,
+    );
+    let check = is_in_check(
+        turn.0.opponent(),
+        &pieces_vec,
+        &pieces_vec,
+        last_move_record,
+    );
 
-        let destination = event.destination;
+    *game_status = if check && !has_moves {
+        GameStatus::Checkmate
+    } else if *last_action == 50 {
+        GameStatus::Draw(DrawReason::FiftyMoveRule)
+    } else if check & has_moves {
+        turn.change();
+        GameStatus::Check
+    } else if !check && !has_moves {
+        GameStatus::Draw(DrawReason::Stalemate)
+    } else {
+        // TODO other draw conditions
+        turn.change();
+        GameStatus::OnGoing
+    };
 
-        let pieces: Vec<_> = pieces.iter().map(|(piece, _)| *piece).collect();
+    let destination = last_move_event.destination;
 
-        if moving_piece.colour == PieceColour::White {
-            *move_number += 1;
-            let move_annotation = generate_move_annotation(
-                &format!("{}. ", *move_number),
-                event,
-                last_move,
-                moving_piece,
-                &pieces,
-                &destination,
-                game_status.as_ref(),
-            );
-            move_history.0.push(move_annotation);
-        } else {
-            let current = move_history.0.last_mut().unwrap();
-            *current = generate_move_annotation(
-                current,
-                event,
-                last_move,
-                moving_piece,
-                &pieces,
-                &destination,
-                game_status.as_ref(),
-            );
-        }
+    // let pieces: Vec<_> = pieces.iter().map(|(piece, _)| *piece).collect();
+
+    if moving_piece.colour == PieceColour::White {
+        *move_number += 1;
+        let move_annotation = generate_move_annotation(
+            &format!("{}. ", *move_number),
+            last_move_event,
+            last_move_record,
+            moving_piece,
+            &pieces_vec,
+            &destination,
+            game_status.as_ref(),
+        );
+        move_history.0.push(move_annotation);
+    } else {
+        let current = move_history.0.last_mut().unwrap();
+        *current = generate_move_annotation(
+            current,
+            last_move_event,
+            last_move_record,
+            moving_piece,
+            &pieces_vec,
+            &destination,
+            game_status.as_ref(),
+        );
     }
 }
 

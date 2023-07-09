@@ -6,10 +6,8 @@ use bevy::utils::HashSet;
 use bevy_mod_picking::{Hover, Selection};
 
 use crate::board;
-use crate::board::components::Move;
-use crate::board::resources::{
-    Graveyard, MoveStack, SelectedPiece, SelectedSquare, SquareMaterials,
-};
+use crate::board::components::{Move, Selected};
+use crate::board::resources::{Graveyard, MoveStack, SquareMaterials};
 use crate::board::{MoveMadeEvent, ResetSelectedEvent, Square, Taken};
 use crate::pieces::{Piece, PieceType};
 
@@ -44,14 +42,15 @@ pub fn remove_taken_pieces(
 }
 
 pub fn colour_moves(
-    selected_piece: Res<SelectedPiece>,
+    // selected_piece: Res<SelectedPiece>,
     materials: Res<SquareMaterials>,
     move_stack: Res<MoveStack>,
+    selected_piece: Query<(&Piece, &Selected)>,
     pieces: Query<&Piece, Without<Taken>>,
     mut squares: Query<(&Square, &mut Handle<StandardMaterial>, &Selection, &Hover)>,
 ) {
-    let moves = if let Some(piece_entity) = selected_piece.entity {
-        let piece = pieces.get(piece_entity).expect("unable to retrieve entity");
+    let moves = if let Ok((piece, _)) = selected_piece.get_single() {
+        // let piece = pieces.get(piece_entity).expect("unable to retrieve entity");
         let pieces_vec: Vec<_> = pieces.iter().copied().collect();
 
         let last_move = move_stack.stack.last().map(|(move_event, _)| {
@@ -96,76 +95,91 @@ pub fn make_move(
 #[allow(clippy::too_many_arguments)]
 pub fn move_piece(
     mut commands: Commands,
-    selected_square: Res<SelectedSquare>,
-    selected_piece: Res<SelectedPiece>,
+    // selected_square: Res<SelectedSquare>,
+    // selected_piece: Res<SelectedPiece>,
     mut graveyard: ResMut<Graveyard>,
     move_stack: Res<MoveStack>,
-    squares: Query<&Square>,
+    selected_square: Query<(&Square, &Selected)>,
+    selected_piece: Query<(Entity, &Piece, &Selected)>,
     pieces: Query<(Entity, &Piece), Without<Taken>>,
     mut reset_selected_event: EventWriter<ResetSelectedEvent>,
     mut move_made_event: EventWriter<MoveMadeEvent>,
 ) {
-    if !selected_square.is_changed() {
+    let Ok((destination, _)) = selected_square.get_single() else { return; };
+
+    // if !selected_square.is_changed() {
+    //     return;
+    // }
+    //
+    // let square = if let Some(Ok(square)) = selected_square
+    //     .entity
+    //     .map(|square_entity| squares.get(square_entity))
+    // {
+    //     square
+    // } else {
+    //     return;
+    // };
+
+    let Ok((piece_entity, moving_piece, _)) = selected_piece.get_single() else { return };
+
+    // no need to move
+    if moving_piece.pos.eq(destination) {
         return;
     }
 
-    let square = if let Some(Ok(square)) = selected_square
-        .entity
-        .map(|square_entity| squares.get(square_entity))
+    // if let Some(piece_entity) = selected_piece.entity {
+    // a piece is selected, so lets move it
+    let pieces_vec: Vec<_> = pieces.iter().map(|(_, piece)| *piece).collect();
+
+    let last_move_event = move_stack.stack.last().map(|(event, _)| event);
+    let last_move = create_last_move_record(last_move_event, &pieces);
+    // let (_, moving_piece) = pieces.get(piece_entity).unwrap();
+
+    if moving_piece
+        .legal_moves(&pieces_vec, last_move)
+        .contains(destination)
     {
-        square
-    } else {
-        return;
-    };
+        let (taken_piece, en_passant) = try_get_taken_piece(
+            &pieces,
+            destination,
+            piece_entity,
+            last_move_event,
+            &last_move,
+        );
 
-    if let Some(piece_entity) = selected_piece.entity {
-        // a piece is selected, so lets move it
-        let pieces_vec: Vec<_> = pieces.iter().map(|(_, piece)| *piece).collect();
-
-        let last_move_event = move_stack.stack.last().map(|(event, _)| event);
-        let last_move = create_last_move_record(last_move_event, &pieces);
-        let (_, moving_piece) = pieces.get(piece_entity).unwrap();
-
-        if moving_piece
-            .legal_moves(&pieces_vec, last_move)
-            .contains(square)
-        {
-            let (taken_piece, en_passant) =
-                try_get_taken_piece(&pieces, square, piece_entity, last_move_event, &last_move);
-
-            if let Some(entity) = taken_piece {
-                commands.entity(entity).insert(Taken {
-                    grave: graveyard.next(moving_piece.colour),
-                });
-            }
-
-            commands
-                .entity(piece_entity)
-                .insert(Move { square: *square });
-
-            // if castling the rook needs to move too
-            if moving_piece.piece_type == PieceType::King
-                && (moving_piece.pos.file - square.file).abs() == 2
-            {
-                move_castling_rook(&mut commands, &pieces, square, moving_piece);
-                move_made_event.send(MoveMadeEvent::castling(
-                    piece_entity,
-                    moving_piece.pos,
-                    *square,
-                ));
-            } else {
-                move_made_event.send(MoveMadeEvent::not_castling(
-                    piece_entity,
-                    moving_piece.pos,
-                    *square,
-                    taken_piece,
-                    en_passant,
-                ));
-            }
+        if let Some(entity) = taken_piece {
+            commands.entity(entity).insert(Taken {
+                grave: graveyard.next(moving_piece.colour),
+            });
         }
 
-        reset_selected_event.send(ResetSelectedEvent);
+        commands.entity(piece_entity).insert(Move {
+            square: *destination,
+        });
+
+        // if castling the rook needs to move too
+        if moving_piece.piece_type == PieceType::King
+            && (moving_piece.pos.file - destination.file).abs() == 2
+        {
+            move_castling_rook(&mut commands, &pieces, destination, moving_piece);
+            move_made_event.send(MoveMadeEvent::castling(
+                piece_entity,
+                moving_piece.pos,
+                *destination,
+            ));
+        } else {
+            move_made_event.send(MoveMadeEvent::not_castling(
+                piece_entity,
+                moving_piece.pos,
+                *destination,
+                taken_piece,
+                en_passant,
+            ));
+        }
     }
+
+    reset_selected_event.send(ResetSelectedEvent);
+    // }
 }
 
 fn try_get_taken_piece(

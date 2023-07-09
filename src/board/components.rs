@@ -22,6 +22,10 @@ pub struct Promote {
     pub to: PieceType,
 }
 
+/// Marker component to indicate when a piece or square is selected
+#[derive(Component)]
+pub struct Selected;
+
 #[derive(Clone, Copy, Component, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Square {
