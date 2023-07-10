@@ -50,7 +50,7 @@ impl Plugin for BoardPlugin {
             .add_startup_system(systems::create_board)
             .add_system(systems::select_square)
             .add_system(systems::select_piece)
-            .add_system(systems::move_piece.before(systems::select_piece)) // if select piece happens first move piece can deselect the selected piece, causing nothing to happen
+            .add_system(systems::move_piece)
             .add_system(systems::make_move)
             .add_system(systems::remove_taken_pieces)
             .add_system(systems::reset_selected)
@@ -58,6 +58,7 @@ impl Plugin for BoardPlugin {
             .add_system(systems::push_move)
             .add_system(systems::select_promotion)
             .add_system(systems::promote_piece)
-            .add_system(systems::update_status.before(systems::make_move));
+            .add_system(systems::update_move_history)
+            .add_system(systems::update_status);
     }
 }

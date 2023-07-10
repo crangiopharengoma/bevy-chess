@@ -108,10 +108,10 @@ pub fn select_piece(
     for (square, _) in squares.iter() {
         for (entity, piece, selected) in pieces.iter() {
             if piece.pos.eq(square) && piece.colour == turn.0 && selected.is_none() {
-                println!("{piece:?} was selected");
+                // println!("{piece:?} was selected");
                 commands.entity(entity).insert(Selected);
             } else if selected.is_some() && piece.colour == turn.0 && piece.pos.ne(square) {
-                println!("{piece:?} was deselected");
+                // println!("{piece:?} was deselected");
                 commands.entity(entity).remove::<Selected>();
             }
         }
@@ -200,22 +200,82 @@ pub fn promote_piece(
     }
 }
 
-pub fn update_status(
-    mut last_action: Local<i32>,
+pub fn update_move_history(
     mut move_number: Local<u32>,
     move_stack: Res<MoveStack>,
     mut move_history: ResMut<MoveHistory>,
-    mut turn: ResMut<PlayerTurn>,
-    mut game_status: ResMut<GameStatus>,
-    pieces: Query<&Piece>,
+    game_status: Res<GameStatus>,
+    pieces: Query<&Piece, Without<Taken>>,
 ) {
-    if move_stack.stack.is_empty() || !move_stack.is_changed() {
+    if move_stack.stack.is_empty() || !game_status.is_changed() {
         return;
     }
 
     let pieces_vec: Vec<_> = pieces.iter().copied().collect();
     let (last_move_event, _) = move_stack.stack.last().unwrap();
     let moving_piece = pieces.get(last_move_event.piece).unwrap();
+    let last_move_record = Some((
+        *moving_piece,
+        last_move_event.origin,
+        last_move_event.destination,
+    ));
+
+    let destination = last_move_event.destination;
+
+    if moving_piece.colour == PieceColour::White {
+        *move_number += 1;
+        let move_annotation = generate_move_annotation(
+            &format!("{}. ", *move_number),
+            last_move_event,
+            last_move_record,
+            moving_piece,
+            &pieces_vec,
+            &destination,
+            game_status.as_ref(),
+        );
+        move_history.0.push(move_annotation);
+    } else {
+        let current = move_history.0.last_mut().unwrap();
+        *current = generate_move_annotation(
+            current,
+            last_move_event,
+            last_move_record,
+            moving_piece,
+            &pieces_vec,
+            &destination,
+            game_status.as_ref(),
+        );
+    }
+}
+
+pub fn update_status(
+    mut last_action: Local<i32>,
+    // mut move_number: Local<usize>,
+    move_stack: Res<MoveStack>,
+    // mut move_history: ResMut<MoveHistory>,
+    mut turn: ResMut<PlayerTurn>,
+    mut game_status: ResMut<GameStatus>,
+    pieces: Query<(&Piece, Option<&Move>), Without<Taken>>,
+) {
+    if move_stack.stack.is_empty() || !move_stack.is_changed() {
+        return;
+    }
+
+    let pieces_vec: Vec<_> = pieces
+        .iter()
+        .map(|(piece, move_opt)| match move_opt {
+            None => *piece,
+            Some(movement) => {
+                let mut piece = *piece;
+                piece.pos = movement.square;
+                piece.has_moved = true;
+                piece
+            }
+        })
+        .collect();
+    // let pieces_vec: Vec<_> = pieces.iter().copied().collect();
+    let (last_move_event, _) = move_stack.stack.last().unwrap();
+    let (moving_piece, _) = pieces.get(last_move_event.piece).unwrap();
     let last_move_record = Some((
         *moving_piece,
         last_move_event.origin,
@@ -256,34 +316,34 @@ pub fn update_status(
         GameStatus::OnGoing
     };
 
-    let destination = last_move_event.destination;
+    // let destination = last_move_event.destination;
 
     // let pieces: Vec<_> = pieces.iter().map(|(piece, _)| *piece).collect();
-
-    if moving_piece.colour == PieceColour::White {
-        *move_number += 1;
-        let move_annotation = generate_move_annotation(
-            &format!("{}. ", *move_number),
-            last_move_event,
-            last_move_record,
-            moving_piece,
-            &pieces_vec,
-            &destination,
-            game_status.as_ref(),
-        );
-        move_history.0.push(move_annotation);
-    } else {
-        let current = move_history.0.last_mut().unwrap();
-        *current = generate_move_annotation(
-            current,
-            last_move_event,
-            last_move_record,
-            moving_piece,
-            &pieces_vec,
-            &destination,
-            game_status.as_ref(),
-        );
-    }
+    //
+    // if moving_piece.colour == PieceColour::White {
+    //     *move_number += 1;
+    //     let move_annotation = generate_move_annotation(
+    //         &format!("{}. ", *move_number),
+    //         last_move_event,
+    //         last_move_record,
+    //         moving_piece,
+    //         &pieces_vec,
+    //         &destination,
+    //         game_status.as_ref(),
+    //     );
+    //     move_history.0.push(move_annotation);
+    // } else {
+    //     let current = move_history.0.last_mut().unwrap();
+    //     *current = generate_move_annotation(
+    //         current,
+    //         last_move_event,
+    //         last_move_record,
+    //         moving_piece,
+    //         &pieces_vec,
+    //         &destination,
+    //         game_status.as_ref(),
+    //     );
+    // }
 }
 
 fn generate_move_annotation(
