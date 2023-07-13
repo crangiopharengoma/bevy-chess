@@ -1,14 +1,14 @@
 use bevy::prelude::Entity;
 
 use crate::board::components::Square;
-use crate::pieces::PieceType;
+use crate::pieces::{Piece, PieceType};
 
 pub struct ResetSelectedEvent;
 
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct MoveMadeEvent {
-    pub piece: Entity,
+    pub piece: Piece,
     pub origin: Square,
     pub destination: Square,
     pub move_type: MoveType,
@@ -25,7 +25,7 @@ pub enum MoveType {
 
 impl MoveMadeEvent {
     pub fn not_castling(
-        piece: Entity,
+        piece: Piece,
         origin: Square,
         destination: Square,
         taken: Option<Entity>,
@@ -49,7 +49,7 @@ impl MoveMadeEvent {
         }
     }
 
-    pub fn castling(piece: Entity, origin: Square, destination: Square) -> MoveMadeEvent {
+    pub fn castling(piece: Piece, origin: Square, destination: Square) -> MoveMadeEvent {
         MoveMadeEvent {
             piece,
             destination,

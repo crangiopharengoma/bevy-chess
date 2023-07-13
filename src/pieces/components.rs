@@ -3,11 +3,7 @@ use std::fmt::{Debug, Display, Formatter};
 use bevy::prelude::*;
 use bevy::utils::HashSet;
 
-use crate::board::Square;
-
-/// Type alias to make passing around previous moves more convenient
-/// Ordering: Piece that moved, origin, destination
-pub type MoveRecord = (Piece, Square, Square);
+use crate::board::{MoveMadeEvent, MoveType, Square};
 
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -121,12 +117,16 @@ impl Piece {
     /// move removes the cause of that check
     ///
     /// The previous move is required for en passant
-    pub fn legal_moves(&self, pieces: &[Piece], last_move: Option<MoveRecord>) -> HashSet<Square> {
+    pub fn legal_moves(
+        &self,
+        pieces: &[Piece],
+        last_move: Option<&MoveMadeEvent>,
+    ) -> HashSet<Square> {
         self.get_move_set()
             .into_iter()
             .filter(|destination| {
                 self.has_clear_path(destination, pieces)
-                    && self.piece_specfic_rules(destination, pieces, &last_move)
+                    && self.piece_specfic_rules(destination, pieces, last_move)
                     && self.avoids_check(destination, pieces)
             })
             .collect()
@@ -154,7 +154,7 @@ impl Piece {
         &self,
         new_position: &Square,
         pieces: &[Piece],
-        last_move: &Option<MoveRecord>,
+        last_move: Option<&MoveMadeEvent>,
     ) -> bool {
         match self.piece_type {
             PieceType::King => is_valid_for_king(self, new_position, pieces),
@@ -199,7 +199,12 @@ impl Piece {
                 piece.is_move_valid(
                     &own_king.pos,
                     &pieces,
-                    &Some((*self, self.pos, *new_position)),
+                    Some(&MoveMadeEvent {
+                        piece: *self,
+                        origin: self.pos,
+                        destination: *new_position,
+                        move_type: MoveType::Move,
+                    }),
                 )
             })
     }
@@ -217,7 +222,7 @@ impl Piece {
         &self,
         new_position: &Square,
         pieces: &[Piece],
-        last_move: &Option<MoveRecord>,
+        last_move: Option<&MoveMadeEvent>,
     ) -> bool {
         if new_position == &self.pos || new_position.is_occupied(pieces) == Some(self.colour) {
             return false;
@@ -290,17 +295,23 @@ impl Piece {
     pub fn may_take_en_passant(
         &self,
         new_position: &Square,
-        last_move: &Option<MoveRecord>,
+        last_move: Option<&MoveMadeEvent>,
     ) -> bool {
         if self.piece_type != PieceType::Pawn {
             false
-        } else if let Some((prev_piece, last_move_origin, last_move_destination)) = last_move {
+        } else if let Some(MoveMadeEvent {
+            piece: prev_piece,
+            origin,
+            destination,
+            ..
+        }) = last_move
+        {
             prev_piece.piece_type == PieceType::Pawn
-                && (last_move_origin.rank - last_move_destination.rank).abs() == 2 // last move was pawn double step
-                && (last_move_destination.file - self.pos.file).abs() == 1     // last move was pawn in adjacent file
-                && last_move_destination.rank == self.pos.rank // pawn is currently in the same rank
-                && new_position.file == last_move_destination.file // move is into the file of the moving pawn (i.e. diagonal)
-                && (new_position.rank - last_move_destination.rank).abs() == 1 // move is into the rank behind the moving pawn
+                && (origin.rank - destination.rank).abs() == 2       // last move was pawn double step
+                && (destination.file - self.pos.file).abs() == 1     // last move was pawn in adjacent file
+                && destination.rank == self.pos.rank                 // pawn is currently in the same rank
+                && new_position.file == destination.file             // move is into the file of the moving pawn (i.e. diagonal)
+                && (new_position.rank - destination.rank).abs() == 1 // move is into the rank behind the moving pawn
         } else {
             false
         }
@@ -374,7 +385,12 @@ impl Piece {
                     opp_piece.is_move_valid(
                         path_sq,
                         pieces,
-                        &Some((*self, self.pos, *new_position)),
+                        Some(&MoveMadeEvent {
+                            piece: *self,
+                            origin: self.pos,
+                            destination: *new_position,
+                            move_type: MoveType::Move,
+                        }),
                     )
                 })
             })
@@ -412,7 +428,7 @@ fn is_valid_for_pawn(
     piece: &Piece,
     new_position: &Square,
     pieces: &[Piece],
-    last_move: &Option<MoveRecord>,
+    last_move: Option<&MoveMadeEvent>,
 ) -> bool {
     let movement_direction = piece.colour.pawn_movement_direction();
 

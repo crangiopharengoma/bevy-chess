@@ -42,7 +42,6 @@ pub fn remove_taken_pieces(
 }
 
 pub fn colour_moves(
-    // selected_piece: Res<SelectedPiece>,
     materials: Res<SquareMaterials>,
     move_stack: Res<MoveStack>,
     selected_piece: Query<(&Piece, &Selected)>,
@@ -53,10 +52,7 @@ pub fn colour_moves(
         // let piece = pieces.get(piece_entity).expect("unable to retrieve entity");
         let pieces_vec: Vec<_> = pieces.iter().copied().collect();
 
-        let last_move = move_stack.stack.last().map(|(move_event, _)| {
-            let last_piece = pieces.get(move_event.piece).unwrap();
-            (*last_piece, move_event.origin, move_event.destination)
-        });
+        let last_move = move_stack.stack.last().map(|(move_event, _)| move_event);
 
         piece.legal_moves(&pieces_vec, last_move)
     } else {
@@ -95,8 +91,6 @@ pub fn make_move(
 #[allow(clippy::too_many_arguments)]
 pub fn move_piece(
     mut commands: Commands,
-    // selected_square: Res<SelectedSquare>,
-    // selected_piece: Res<SelectedPiece>,
     mut graveyard: ResMut<Graveyard>,
     move_stack: Res<MoveStack>,
     selected_square: Query<(&Square, &Selected)>,
@@ -106,46 +100,21 @@ pub fn move_piece(
     mut move_made_event: EventWriter<MoveMadeEvent>,
 ) {
     let Ok((destination, _)) = selected_square.get_single() else { return; };
-
-    // if !selected_square.is_changed() {
-    //     return;
-    // }
-    //
-    // let square = if let Some(Ok(square)) = selected_square
-    //     .entity
-    //     .map(|square_entity| squares.get(square_entity))
-    // {
-    //     square
-    // } else {
-    //     return;
-    // };
-
     let Ok((piece_entity, moving_piece, _)) = selected_piece.get_single() else { return };
-
-    // no need to move
     if moving_piece.pos.eq(destination) {
         return;
     }
 
-    // if let Some(piece_entity) = selected_piece.entity {
-    // a piece is selected, so lets move it
     let pieces_vec: Vec<_> = pieces.iter().map(|(_, piece)| *piece).collect();
 
-    let last_move_event = move_stack.stack.last().map(|(event, _)| event);
-    let last_move = create_last_move_record(last_move_event, &pieces);
-    // let (_, moving_piece) = pieces.get(piece_entity).unwrap();
+    let last_move = move_stack.stack.last().map(|(event, _)| event);
 
     if moving_piece
         .legal_moves(&pieces_vec, last_move)
         .contains(destination)
     {
-        let (taken_piece, en_passant) = try_get_taken_piece(
-            &pieces,
-            destination,
-            piece_entity,
-            last_move_event,
-            &last_move,
-        );
+        let (taken_piece, en_passant) =
+            try_get_taken_piece(&pieces, destination, piece_entity, last_move);
 
         if let Some(entity) = taken_piece {
             commands.entity(entity).insert(Taken {
@@ -163,13 +132,13 @@ pub fn move_piece(
         {
             move_castling_rook(&mut commands, &pieces, destination, moving_piece);
             move_made_event.send(MoveMadeEvent::castling(
-                piece_entity,
+                *moving_piece,
                 moving_piece.pos,
                 *destination,
             ));
         } else {
             move_made_event.send(MoveMadeEvent::not_castling(
-                piece_entity,
+                *moving_piece,
                 moving_piece.pos,
                 *destination,
                 taken_piece,
@@ -179,15 +148,13 @@ pub fn move_piece(
     }
 
     reset_selected_event.send(ResetSelectedEvent);
-    // }
 }
 
 fn try_get_taken_piece(
     pieces: &Query<(Entity, &Piece), Without<Taken>>,
     square: &Square,
     piece_entity: Entity,
-    last_move_event: Option<&MoveMadeEvent>,
-    last_move: &Option<(Piece, Square, Square)>,
+    last_move: Option<&MoveMadeEvent>,
 ) -> (Option<Entity>, bool) {
     let (taken_piece, en_passant) = {
         let taken_piece = pieces
@@ -196,8 +163,7 @@ fn try_get_taken_piece(
             .map(|(entity, _)| entity);
 
         if taken_piece.is_none() {
-            let taken_piece =
-                get_en_passant_piece(pieces, square, piece_entity, last_move_event, last_move);
+            let taken_piece = get_en_passant_piece(pieces, square, piece_entity, last_move);
             (taken_piece, taken_piece.is_some())
         } else {
             (taken_piece, false)
@@ -241,31 +207,20 @@ fn get_en_passant_piece(
     pieces: &Query<(Entity, &Piece), Without<Taken>>,
     square: &Square,
     piece_entity: Entity,
-    last_move_event: Option<&MoveMadeEvent>,
-    last_move: &Option<(Piece, Square, Square)>,
+    last_move: Option<&MoveMadeEvent>,
 ) -> Option<Entity> {
-    let last_move_event = last_move_event?;
     if pieces
         .get(piece_entity)
         .unwrap()
         .1
         .may_take_en_passant(square, last_move)
     {
-        Some(last_move_event.piece)
+        let last_move_event = last_move?;
+        pieces
+            .iter()
+            .find(|(_, piece)| piece.pos == last_move_event.destination)
+            .map(|(entity, _)| entity)
     } else {
         None
     }
-}
-
-fn create_last_move_record(
-    last_move_event: Option<&MoveMadeEvent>,
-    pieces: &Query<(Entity, &Piece), Without<Taken>>,
-) -> Option<(Piece, Square, Square)> {
-    let last_move_event = last_move_event?;
-    let (_, last_piece) = pieces.get(last_move_event.piece).unwrap();
-    Some((
-        *last_piece,
-        last_move_event.origin,
-        last_move_event.destination,
-    ))
 }
