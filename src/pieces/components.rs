@@ -3,7 +3,8 @@ use std::fmt::{Debug, Display, Formatter};
 use bevy::prelude::*;
 use bevy::utils::HashSet;
 
-use crate::board::{MoveMadeEvent, MoveType, Square};
+use crate::board::Square;
+use crate::board::{MoveMadeEvent, MoveType};
 
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(debug_assertions, derive(Debug))]

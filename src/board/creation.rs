@@ -1,30 +1,16 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 
+use bevy::asset::{Assets, Handle};
 use bevy::math::Vec3;
-use bevy::prelude::*;
+use bevy::pbr::{PbrBundle, StandardMaterial};
+use bevy::prelude::{
+    shape, Color, Commands, Component, FromWorld, Mesh, Res, ResMut, Resource, Transform, World,
+};
+use bevy_mod_picking::{Highlighting, PickableBundle};
 
 use crate::board;
-use crate::pieces::{Piece, PieceColour, PieceType};
-
-#[derive(Component)]
-pub struct Taken {
-    pub grave: Vec3,
-}
-
-#[derive(Component)]
-pub struct Move {
-    pub square: Square,
-}
-
-#[derive(Component)]
-pub struct Promote {
-    pub to: PieceType,
-}
-
-/// Marker component to indicate when a piece or square is selected
-#[derive(Component)]
-pub struct Selected;
+use crate::pieces::{Piece, PieceColour};
 
 #[derive(Clone, Copy, Component, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -150,5 +136,72 @@ impl Add<(i8, i8)> for &Square {
 impl From<(i8, i8)> for Square {
     fn from((x, y): (i8, i8)) -> Self {
         Square { rank: x, file: y }
+    }
+}
+
+#[derive(Resource)]
+pub struct SquareMaterials {
+    pub selected_colour: Handle<StandardMaterial>,
+    pub hover_colour: Handle<StandardMaterial>,
+    pub black_colour: Handle<StandardMaterial>,
+    pub white_colour: Handle<StandardMaterial>,
+    pub highlight_colour: Handle<StandardMaterial>,
+}
+
+impl FromWorld for SquareMaterials {
+    fn from_world(world: &mut World) -> Self {
+        let world = world.cell();
+        let mut materials = world
+            .get_resource_mut::<Assets<StandardMaterial>>()
+            .unwrap();
+        SquareMaterials {
+            hover_colour: materials.add(Color::rgb(0.1, 0.9, 0.7).into()),
+            selected_colour: materials.add(Color::rgb(0.9, 0.1, 0.1).into()),
+            black_colour: materials.add(Color::rgb(0., 0.1, 0.1).into()),
+            white_colour: materials.add(Color::rgb(1., 0.9, 0.9).into()),
+            highlight_colour: materials.add(Color::rgb(0.3, 0.6, 0.8).into()),
+        }
+    }
+}
+
+pub fn create_board(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    square_materials: Res<SquareMaterials>,
+) {
+    let mesh = meshes.add(Mesh::from(shape::Plane {
+        size: 1.0,
+        subdivisions: 0,
+    }));
+
+    for rank in board::RANK_1..=board::RANK_8 {
+        for file in board::A_FILE..=board::H_FILE {
+            let square = Square { rank, file };
+            let initial_material = if square.is_white() {
+                square_materials.white_colour.clone()
+            } else {
+                square_materials.black_colour.clone()
+            };
+            commands.spawn((
+                PbrBundle {
+                    mesh: mesh.clone(),
+                    material: initial_material.clone(),
+                    transform: Transform::from_translation(Vec3::new(
+                        rank as f32,
+                        0.0,
+                        file as f32,
+                    )),
+                    ..Default::default()
+                },
+                PickableBundle::default(),
+                Highlighting {
+                    initial: initial_material.clone(),
+                    hovered: Some(square_materials.hover_colour.clone()),
+                    pressed: None,
+                    selected: Some(square_materials.selected_colour.clone()),
+                },
+                Square { rank, file },
+            ));
+        }
     }
 }

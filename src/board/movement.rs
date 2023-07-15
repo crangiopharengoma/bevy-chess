@@ -6,10 +6,130 @@ use bevy::utils::HashSet;
 use bevy_mod_picking::{Hover, Selection};
 
 use crate::board;
-use crate::board::components::{Move, Selected};
-use crate::board::resources::{Graveyard, MoveStack, SquareMaterials};
-use crate::board::{MoveMadeEvent, ResetSelectedEvent, Square, Taken};
-use crate::pieces::{Piece, PieceType};
+use crate::board::creation::{Square, SquareMaterials};
+use crate::board::selection::ResetSelectedEvent;
+use crate::board::selection::Selected;
+use crate::pieces::{Piece, PieceColour, PieceType};
+
+#[derive(Resource, Default)]
+pub struct MoveStack {
+    pub stack: Vec<(MoveMadeEvent, Vec<Piece>)>,
+}
+
+#[derive(Resource)]
+pub struct Graveyard {
+    white: Vec3,
+    black: Vec3,
+}
+
+impl Default for Graveyard {
+    fn default() -> Self {
+        Graveyard {
+            white: Vec3::new(-1.0, 0.0, 0.0),
+            black: Vec3::new(8.0, 0.0, 0.0),
+        }
+    }
+}
+
+impl Graveyard {
+    pub fn next(&mut self, colour: PieceColour) -> Vec3 {
+        match colour {
+            PieceColour::White => self.next_white(),
+            PieceColour::Black => self.next_black(),
+        }
+    }
+
+    fn next_white(&mut self) -> Vec3 {
+        let current = self.white;
+        self.white = if current.z >= 7.0 {
+            Vec3::new(current.x - 1.0, current.y, 0.0)
+        } else {
+            Vec3::new(current.x, current.y, current.z + 1.0)
+        };
+        current
+    }
+
+    fn next_black(&mut self) -> Vec3 {
+        let current = self.black;
+        self.black = if current.z >= 7.0 {
+            Vec3::new(current.x + 1.0, current.y, 0.0)
+        } else {
+            Vec3::new(current.x, current.y, current.z + 1.0)
+        };
+        current
+    }
+}
+
+#[derive(Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct MoveMadeEvent {
+    pub piece: Piece,
+    pub origin: Square,
+    pub destination: Square,
+    pub move_type: MoveType,
+}
+
+#[derive(Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum MoveType {
+    Move,
+    Take(Entity),
+    TakeEnPassant(Entity),
+    Castle,
+}
+
+impl MoveMadeEvent {
+    pub fn not_castling(
+        piece: Piece,
+        origin: Square,
+        destination: Square,
+        taken: Option<Entity>,
+        en_passant: bool,
+    ) -> MoveMadeEvent {
+        let move_type = if let Some(entity) = taken {
+            if en_passant {
+                MoveType::TakeEnPassant(entity)
+            } else {
+                MoveType::Take(entity)
+            }
+        } else {
+            MoveType::Move
+        };
+
+        MoveMadeEvent {
+            piece,
+            destination,
+            origin,
+            move_type,
+        }
+    }
+
+    pub fn castling(piece: Piece, origin: Square, destination: Square) -> MoveMadeEvent {
+        MoveMadeEvent {
+            piece,
+            destination,
+            origin,
+            move_type: MoveType::Castle,
+        }
+    }
+
+    pub fn is_take(&self) -> bool {
+        matches!(
+            self.move_type,
+            MoveType::Take(_) | MoveType::TakeEnPassant(_)
+        )
+    }
+}
+
+#[derive(Component)]
+pub struct Taken {
+    pub grave: Vec3,
+}
+
+#[derive(Component)]
+pub struct Move {
+    pub square: Square,
+}
 
 pub fn push_move(
     mut stack: ResMut<MoveStack>,

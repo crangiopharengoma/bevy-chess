@@ -1,16 +1,18 @@
 use bevy::prelude::*;
 
-pub use components::{Promote, Square, Taken};
-pub use events::{
-    MoveMadeEvent, MoveType, PromotionOutcome, ResetSelectedEvent, SelectPromotionOutcome,
-};
-pub use resources::{DrawReason, GameStatus, MoveHistory, PlayerTurn};
-use resources::{Graveyard, MoveStack, SquareMaterials};
+pub use creation::{Square, SquareMaterials};
+pub use history::MoveHistory;
+pub use movement::{Graveyard, MoveMadeEvent, MoveStack, MoveType, Taken};
+pub use promotion::{Promote, PromotionOutcome, SelectPromotionOutcome};
+pub use selection::ResetSelectedEvent;
+pub use status::{DrawReason, GameStatus, PlayerTurn};
 
-mod components;
-mod events;
-mod resources;
-mod systems;
+mod creation;
+mod history;
+mod movement;
+mod promotion;
+mod selection;
+mod status;
 
 pub struct BoardPlugin;
 
@@ -47,18 +49,18 @@ impl Plugin for BoardPlugin {
             .add_event::<MoveMadeEvent>()
             .add_event::<SelectPromotionOutcome>()
             .add_event::<PromotionOutcome>()
-            .add_startup_system(systems::create_board)
-            .add_system(systems::select_square)
-            .add_system(systems::select_piece)
-            .add_system(systems::move_piece)
-            .add_system(systems::make_move)
-            .add_system(systems::remove_taken_pieces)
-            .add_system(systems::reset_selected)
-            .add_system(systems::colour_moves)
-            .add_system(systems::push_move)
-            .add_system(systems::select_promotion)
-            .add_system(systems::promote_piece)
-            .add_system(systems::update_move_history)
-            .add_system(systems::update_status);
+            .add_startup_system(creation::create_board)
+            .add_system(selection::select_square)
+            .add_system(selection::select_piece)
+            .add_system(selection::reset_selected)
+            .add_system(movement::move_piece)
+            .add_system(movement::make_move)
+            .add_system(movement::remove_taken_pieces)
+            .add_system(movement::colour_moves)
+            .add_system(movement::push_move)
+            .add_system(promotion::select_promotion)
+            .add_system(promotion::promote_piece)
+            .add_system(history::update_move_history)
+            .add_system(status::update_status);
     }
 }

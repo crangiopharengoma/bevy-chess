@@ -3,9 +3,9 @@ use bevy::a11y::AccessibilityNode;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 
-use crate::board::{
-    DrawReason, GameStatus, MoveHistory, PlayerTurn, PromotionOutcome, SelectPromotionOutcome,
-};
+use crate::board::MoveHistory;
+use crate::board::{DrawReason, GameStatus, PlayerTurn};
+use crate::board::{PromotionOutcome, SelectPromotionOutcome};
 use crate::pieces::PieceType;
 
 pub struct UiPlugin;

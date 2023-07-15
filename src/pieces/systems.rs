@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 pub use creation::create_pieces;
 
-use crate::board::{Promote, Taken};
+use crate::board::Promote;
+use crate::board::Taken;
 use crate::pieces::resources::{Meshes, PieceMesh};
 use crate::pieces::{Piece, PieceColour};
 
