@@ -146,7 +146,7 @@ impl Piece {
     /// - Pawns may only take on diagonals
     /// - Pawns may only move two steps on their first movement
     /// - Pawns may take en passant
-    /// - The King may castle (not yet implemented)
+    /// - The King may castle
     ///
     /// Note that knight movement rules are baked into the is_path_empty method checks rather than
     /// being treated as a piece specific rule
